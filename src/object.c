@@ -631,61 +631,54 @@ void trimStringObjectIfNeeded(robj *o, int trim_small_values) {
     }
 }
 
-/* Try to encode a string object in order to save space */
+/* 尝试编码一个字符串对象以节省空间 */
 robj *tryObjectEncodingEx(robj *o, int try_trim) {
     long value;
     sds s = o->ptr;
     size_t len;
 
-    /* Make sure this is a string object, the only type we encode
-     * in this function. Other types use encoded memory efficient
-     * representations but are handled by the commands implementing
-     * the type. */
-    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+    /* 确保这是字符串对象，这是我们在此函数中编码的唯一类型。
+     * 其他类型使用编码的内存高效表示，但由实现该类型的命令处理。 */
+    serverAssertWithInfo(NULL,o,o->type == OBJ_STRING); // 确保这是字符串对象，这是我们在此函数中编码的唯一类型。
 
-    /* We try some specialized encoding only for objects that are
-     * RAW or EMBSTR encoded, in other words objects that are still
-     * in represented by an actually array of chars. */
+    /* 我们只对 RAW 或 EMBSTR 编码的对象尝试一些专门的编码，
+     * 也就是说，这些对象仍然由实际的字符数组表示。 */
     if (!sdsEncodedObject(o)) return o;
 
-    /* It's not safe to encode shared objects: shared objects can be shared
-     * everywhere in the "object space" of Redis and may end in places where
-     * they are not handled. We handle them only as values in the keyspace. */
+    /* 不安全编码共享对象：共享对象可以在 Redis 的“对象空间”中的任何地方共享，
+     * 可能会出现在不处理它们的任何地方。我们只在键空间中处理它们。 */
      if (o->refcount > 1) return o;
 
-    /* Check if we can represent this string as a long integer.
-     * Note that we are sure that a string larger than 20 chars is not
-     * representable as a 32 nor 64 bit integer. */
+    /* 检查是否可以将此字符串表示为长整数。
+     * 注意，我们确定一个大于 20 个字符的字符串不能表示为 32 或 64 位整数。 */
     len = sdslen(s);
     if (len <= 20 && string2l(s,len,&value)) {
-        /* This object is encodable as a long. Try to use a shared object.
-         * Note that we avoid using shared integers when maxmemory is used
-         * because every object needs to have a private LRU field for the LRU
-         * algorithm to work well. */
+        /* 这个对象可以表示为长整数。尝试使用共享对象。
+         * 注意，当使用 maxmemory 时，我们避免使用共享整数，
+         * 因为每个对象需要一个私有 LRU 字段，以使 LRU 算法正常工作。 */
         if ((server.maxmemory == 0 ||
             !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS)) &&
             value >= 0 &&
             value < OBJ_SHARED_INTEGERS)
         {
-            decrRefCount(o);
-            return shared.integers[value];
+            decrRefCount(o); // 减少引用计数, 因为我们要返回共享整数对象
+            return shared.integers[value]; // 返回共享整数对象
         } else {
-            if (o->encoding == OBJ_ENCODING_RAW) {
-                sdsfree(o->ptr);
-                o->encoding = OBJ_ENCODING_INT;
-                o->ptr = (void*) value;
-                return o;
-            } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
-                decrRefCount(o);
-                return createStringObjectFromLongLongForValue(value);
+            if (o->encoding == OBJ_ENCODING_RAW) { // 如果对象是 RAW 编码
+                sdsfree(o->ptr); // 释放原始 SDS 字符串
+                o->encoding = OBJ_ENCODING_INT; // 设置编码为 INT
+                o->ptr = (void*) value; // 设置指针为共享整数对象
+                return o; // 返回对象   
+            } else if (o->encoding == OBJ_ENCODING_EMBSTR) { // 如果对象是 EMBSTR 编码
+                decrRefCount(o); // 减少引用计数
+                return createStringObjectFromLongLongForValue(value); // 创建一个新的共享整数对象
             }
         }
     }
 
-    /* If the string is small and is still RAW encoded,
-     * try the EMBSTR encoding which is more efficient.
-     * In this representation the object and the SDS string are allocated
-     * in the same chunk of memory to save space and cache misses. */
+    /* 如果字符串很小并且仍然是 RAW 编码，
+     * 尝试 EMBSTR 编码，这是一种更高效的编码。
+     * 在这种表示中，对象和 SDS 字符串分配在同一块内存中，以节省空间和缓存未命中。 */
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT) {
         robj *emb;
 
@@ -695,12 +688,12 @@ robj *tryObjectEncodingEx(robj *o, int try_trim) {
         return emb;
     }
 
-    /* We can't encode the object...
-     * Do the last try, and at least optimize the SDS string inside */
+    /* 我们不能编码对象...
+     * 最后尝试一下，至少优化 SDS 字符串内部 */
     if (try_trim)
         trimStringObjectIfNeeded(o, 0);
 
-    /* Return the original object. */
+    /* 返回原始对象。 */
     return o;
 }
 

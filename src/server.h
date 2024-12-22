@@ -118,8 +118,8 @@ struct hdr_histogram;
 #define CRON_DBS_PER_CALL 16
 #define NET_MAX_WRITES_PER_EVENT (1024*64)
 #define PROTO_SHARED_SELECT_CMDS 10
-#define OBJ_SHARED_INTEGERS 10000
-#define OBJ_SHARED_BULKHDR_LEN 32
+#define OBJ_SHARED_INTEGERS 10000 // 共享整数对象的数量
+#define OBJ_SHARED_BULKHDR_LEN 32 // 共享对象的 bulk header 长度
 #define OBJ_SHARED_HDR_STRLEN(_len_) (((_len_) < 10) ? 4 : 5) /* see shared.mbulkhdr etc. */
 #define LOG_MAX_LEN    1024 /* Default maximum length of syslog messages.*/
 #define AOF_REWRITE_ITEMS_PER_CMD 64
@@ -1325,7 +1325,7 @@ struct sharedObjectsStruct {
     *getack, *special_asterick, *special_equals, *default_username, *redacted,
     *ssubscribebulk,*sunsubscribebulk, *smessagebulk,
     *select[PROTO_SHARED_SELECT_CMDS],
-    *integers[OBJ_SHARED_INTEGERS],
+    *integers[OBJ_SHARED_INTEGERS], // 共享整数对象, 用于节省内存
     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
     *bulkhdr[OBJ_SHARED_BULKHDR_LEN],  /* "$<value>\r\n" */
     *maphdr[OBJ_SHARED_BULKHDR_LEN],   /* "%<value>\r\n" */

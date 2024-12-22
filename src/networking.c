@@ -2387,16 +2387,16 @@ int processMultibulkBuffer(client *c) {
                 c->bulklen >= PROTO_MBULK_BIG_ARG &&
                 sdslen(c->querybuf) == (size_t)(c->bulklen+2))
             {
-                c->argv[c->argc++] = createObject(OBJ_STRING,c->querybuf);
+                c->argv[c->argc++] = createObject(OBJ_STRING,c->querybuf); // 创建字符串对象
                 c->argv_len_sum += c->bulklen;
                 sdsIncrLen(c->querybuf,-2); /* remove CRLF */
                 /* Assume that if we saw a fat argument we'll see another one
                  * likely... */
-                c->querybuf = sdsnewlen(SDS_NOINIT,c->bulklen+2);
-                sdsclear(c->querybuf);
+                c->querybuf = sdsnewlen(SDS_NOINIT,c->bulklen+2); // 创建新的字符串对象
+                sdsclear(c->querybuf); // 清空字符串对象
             } else {
                 c->argv[c->argc++] =
-                    createStringObject(c->querybuf+c->qb_pos,c->bulklen);
+                    createStringObject(c->querybuf+c->qb_pos,c->bulklen); // 创建字符串对象
                 c->argv_len_sum += c->bulklen;
                 c->qb_pos += c->bulklen+2;
             }
@@ -2550,9 +2550,9 @@ int processInputBuffer(client *c) {
         }
 
         if (c->reqtype == PROTO_REQ_INLINE) {
-            if (processInlineBuffer(c) != C_OK) break;
+            if (processInlineBuffer(c) != C_OK) break; // 处理内联缓冲区
         } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
-            if (processMultibulkBuffer(c) != C_OK) break;
+            if (processMultibulkBuffer(c) != C_OK) break; // 处理多批量缓冲区
         } else {
             serverPanic("Unknown request type");
         }

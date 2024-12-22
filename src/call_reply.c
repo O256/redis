@@ -35,32 +35,29 @@
 #define REPLY_FLAG_RESP3 (1<<2)
 
 /* --------------------------------------------------------
- * An opaque struct used to parse a RESP protocol reply and
- * represent it. Used when parsing replies such as in RM_Call
- * or Lua scripts.
+ * 一个不透明的结构体，用于解析 RESP 协议回复并表示它。
+ * 在 RM_Call 或 Lua 脚本中解析回复时使用。
  * -------------------------------------------------------- */
 struct CallReply {
     void *private_data;
-    sds original_proto; /* Available only for root reply. */
+    sds original_proto; /* 仅适用于根回复。 */
     const char *proto;
     size_t proto_len;
     int type;       /* REPLY_... */
     int flags;      /* REPLY_FLAG... */
-    size_t len;     /* Length of a string, or the number elements in an array. */
+    size_t len;     /* 字符串长度，或数组中的元素数量。 */
     union {
         const char *str; /* String pointer for string and error replies. This
-                          * does not need to be freed, always points inside
-                          * a reply->proto buffer of the reply object or, in
-                          * case of array elements, of parent reply objects. */
+                          * 不需要释放，总是指向回复对象的 proto 缓冲区或数组元素的父回复对象的 proto 缓冲区。 */
         struct {
             const char *str;
             const char *format;
-        } verbatim_str;  /* Reply value for verbatim string */
-        long long ll;    /* Reply value for integer reply. */
-        double d;        /* Reply value for double reply. */
-        struct CallReply *array; /* Array of sub-reply elements. used for set, array, map, and attribute */
+        } verbatim_str;  /* 回复值为 verbatim string */
+        long long ll;    /* 整数回复的值。 */
+        double d;        /* 双精度回复的值。 */
+        struct CallReply *array; /* 数组子回复元素的数组。用于 set、array、map 和 attribute */
     } val;
-    list *deferred_error_list;   /* list of errors in sds form or NULL */
+    list *deferred_error_list;   /* 错误列表，以 sds 形式或 NULL */
     struct CallReply *attribute; /* attribute reply, NULL if not exists */
 };
 
