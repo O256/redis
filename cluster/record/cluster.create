@@ -1,0 +1,75 @@
+[user00@SH2C2G sentinel-27001]$ ~/redis/src/redis-cli -p 7001 -a 12345687 --cluster create \
+> 127.0.0.1:7001 127.0.0.1:7002 127.0.0.1:7003 \
+> 127.0.0.1:7011 127.0.0.1:7012 127.0.0.1:7013 \
+> 127.0.0.1:7021 127.0.0.1:7022 127.0.0.1:7023 \
+> --cluster-replicas 2
+Warning: Using a password with '-a' or '-u' option on the command line interface may not be safe.
+>>> Performing hash slots allocation on 9 nodes...
+Master[0] -> Slots 0 - 5460
+Master[1] -> Slots 5461 - 10922
+Master[2] -> Slots 10923 - 16383
+Adding replica 127.0.0.1:7012 to 127.0.0.1:7001
+Adding replica 127.0.0.1:7013 to 127.0.0.1:7001
+Adding replica 127.0.0.1:7021 to 127.0.0.1:7002
+Adding replica 127.0.0.1:7022 to 127.0.0.1:7002
+Adding replica 127.0.0.1:7023 to 127.0.0.1:7003
+Adding replica 127.0.0.1:7011 to 127.0.0.1:7003
+>>> Trying to optimize slaves allocation for anti-affinity
+[WARNING] Some slaves are in the same host as their master
+M: c187a55ca4176904767a9a8089fc7f6799a9d32f 127.0.0.1:7001
+   slots:[0-5460] (5461 slots) master
+M: 8577c6dc7b223e1857aa51b25616f5a3411277b2 127.0.0.1:7002
+   slots:[5461-10922] (5462 slots) master
+M: 4fff34ea99bbc9ed59e0e35c2a070ad629c4ed19 127.0.0.1:7003
+   slots:[10923-16383] (5461 slots) master
+S: e641a2b71b7326b198ad17955ca74d3bd74f927c 127.0.0.1:7011
+   replicates 8577c6dc7b223e1857aa51b25616f5a3411277b2
+S: 64c162c131f69674897c4a7eb9400438e9f5ba71 127.0.0.1:7012
+   replicates c187a55ca4176904767a9a8089fc7f6799a9d32f
+S: e95fbcb9303230ae01626e03455504b1a9e565c6 127.0.0.1:7013
+   replicates c187a55ca4176904767a9a8089fc7f6799a9d32f
+S: 44c37371a83a04b09b969d430bee2d65e7812669 127.0.0.1:7021
+   replicates 8577c6dc7b223e1857aa51b25616f5a3411277b2
+S: d5be582109b17713ddc089ebccf715e7d639cbd0 127.0.0.1:7022
+   replicates 4fff34ea99bbc9ed59e0e35c2a070ad629c4ed19
+S: 2b4ddc08dc567aa4336a12e88975358f500dcd11 127.0.0.1:7023
+   replicates 4fff34ea99bbc9ed59e0e35c2a070ad629c4ed19
+Can I set the above configuration? (type 'yes' to accept): yes
+>>> Nodes configuration updated
+>>> Assign a different config epoch to each node
+>>> Sending CLUSTER MEET messages to join the cluster
+Waiting for the cluster to join
+...
+>>> Performing Cluster Check (using node 127.0.0.1:7001)
+M: c187a55ca4176904767a9a8089fc7f6799a9d32f 127.0.0.1:7001
+   slots:[0-5460] (5461 slots) master
+   2 additional replica(s)
+S: e641a2b71b7326b198ad17955ca74d3bd74f927c 127.0.0.1:7011
+   slots: (0 slots) slave
+   replicates 8577c6dc7b223e1857aa51b25616f5a3411277b2
+S: 64c162c131f69674897c4a7eb9400438e9f5ba71 127.0.0.1:7012
+   slots: (0 slots) slave
+   replicates c187a55ca4176904767a9a8089fc7f6799a9d32f
+M: 8577c6dc7b223e1857aa51b25616f5a3411277b2 127.0.0.1:7002
+   slots:[5461-10922] (5462 slots) master
+   2 additional replica(s)
+S: 2b4ddc08dc567aa4336a12e88975358f500dcd11 127.0.0.1:7023
+   slots: (0 slots) slave
+   replicates 4fff34ea99bbc9ed59e0e35c2a070ad629c4ed19
+S: d5be582109b17713ddc089ebccf715e7d639cbd0 127.0.0.1:7022
+   slots: (0 slots) slave
+   replicates 4fff34ea99bbc9ed59e0e35c2a070ad629c4ed19
+S: e95fbcb9303230ae01626e03455504b1a9e565c6 127.0.0.1:7013
+   slots: (0 slots) slave
+   replicates c187a55ca4176904767a9a8089fc7f6799a9d32f
+S: 44c37371a83a04b09b969d430bee2d65e7812669 127.0.0.1:7021
+   slots: (0 slots) slave
+   replicates 8577c6dc7b223e1857aa51b25616f5a3411277b2
+M: 4fff34ea99bbc9ed59e0e35c2a070ad629c4ed19 127.0.0.1:7003
+   slots:[10923-16383] (5461 slots) master
+   2 additional replica(s)
+[OK] All nodes agree about slots configuration.
+>>> Check for open slots...
+>>> Check slots coverage...
+[OK] All 16384 slots covered.
+
