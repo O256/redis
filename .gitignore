@@ -1,10 +1,15 @@
+# 临时文件
 .*.swp
 *.o
 *.xo
 *.so
 *.d
 *.log
+
+# Redis 数据文件
 dump.rdb
+
+# Redis 可执行文件
 redis-benchmark
 redis-check-aof
 redis-check-rdb
@@ -12,12 +17,18 @@ redis-check-dump
 redis-cli
 redis-sentinel
 redis-server
+
+# 工具和构建相关
 doc-tools
 release
 misc/*
 src/release.h
+
+# AOF 持久化文件
 appendonly.aof*
 appendonlydir
+
+# 项目管理文件
 SHORT_TERM_TODO
 release.h
 src/transfer.sh
@@ -25,16 +36,26 @@ src/configs
 redis.ds
 src/redis.conf
 src/nodes.conf
+
+# Lua 相关编译文件
 deps/lua/src/lua
 deps/lua/src/luac
 deps/lua/src/liblua.a
+
+# 依赖库编译文件
 deps/hdr_histogram/libhdrhistogram.a
 deps/fpconv/libfpconv.a
+
+# TLS 证书和密钥
 tests/tls/*
+
+# 构建和编译相关文件
 .make-*
 .prerequisites
 *.dSYM
 Makefile.dep
+
+# IDE 和编辑器配置文件
 .vscode/*
 .idea/*
 .ccls

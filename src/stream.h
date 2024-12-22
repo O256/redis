@@ -4,23 +4,21 @@
 #include "rax.h"
 #include "listpack.h"
 
-/* Stream item ID: a 128 bit number composed of a milliseconds time and
- * a sequence counter. IDs generated in the same millisecond (or in a past
- * millisecond if the clock jumped backward) will use the millisecond time
- * of the latest generated ID and an incremented sequence. */
+/* Stream的item ID: 一个128位的数字，由一个毫秒时间和一个序列号组成。在同一毫秒（或过去某个毫秒，如果时钟向后跳跃）生成的ID将使用最新生成的ID的毫秒时间
+ * 和递增的序列号。 */
 typedef struct streamID {
-    uint64_t ms;        /* Unix time in milliseconds. */
-    uint64_t seq;       /* Sequence number. */
+    uint64_t ms;        /* unix 时间戳，单位为毫秒 */
+    uint64_t seq;       /* 序列号 */
 } streamID;
 
 typedef struct stream {
-    rax *rax;               /* The radix tree holding the stream. */
-    uint64_t length;        /* Current number of elements inside this stream. */
-    streamID last_id;       /* Zero if there are yet no items. */
-    streamID first_id;      /* The first non-tombstone entry, zero if empty. */
-    streamID max_deleted_entry_id;  /* The maximal ID that was deleted. */
-    uint64_t entries_added; /* All time count of elements added. */
-    rax *cgroups;           /* Consumer groups dictionary: name -> streamCG */
+    rax *rax;               /* 存储stream的radix tree */
+    uint64_t length;        /* 当前stream中的元素数量 */
+    streamID last_id;       /* 如果stream为空，则为0 */
+    streamID first_id;      /* 第一个非tombstone entry，如果stream为空，则为0 */
+    streamID max_deleted_entry_id;  /* 被删除的最大ID */
+    uint64_t entries_added; /* 所有添加的元素数量 */
+    rax *cgroups;           /* 消费组: name -> streamCG */
 } stream;
 
 /* We define an iterator to iterate stream items in an abstract way, without

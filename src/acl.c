@@ -1,30 +1,22 @@
 /*
- * Copyright (c) 2018, Salvatore Sanfilippo <antirez at gmail dot com>
- * All rights reserved.
+ * 版权所有 (c) 2018, Salvatore Sanfilippo <antirez at gmail dot com>
+ * 保留所有权利。
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * 在满足以下条件的情况下，允许以源代码和二进制形式重新分发和使用，
+ * 无论是否进行修改：
  *
- *   * Redistributions of source code must retain the above copyright notice,
- *     this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above copyright
- *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Redis nor the names of its contributors may be used
- *     to endorse or promote products derived from this software without
- *     specific prior written permission.
+ *   * 源代码的再分发必须保留上述版权声明、本条件列表和以下免责声明。
+ *   * 以二进制形式再分发必须在随分发提供的文档和/或其他材料中复制上述
+ *     版权声明、本条件列表和以下免责声明。
+ *   * 未经特定的事先书面许可，不得使用Redis或其贡献者的名字来为衍生的
+ *     产品背书或推广。
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * 本软件由版权所有者和贡献者"按原样"提供，不提供任何明示或暗示的保证，
+ * 包括但不限于对适销性和特定用途适用性的保证。在任何情况下，版权所有者
+ * 或贡献者均不对任何直接、间接、偶然、特殊、惩戒性或后果性损害（包括但
+ * 不限于采购替代商品或服务；使用价值、数据或利润的损失；或业务中断）承担
+ * 责任，无论是在合同、严格责任或侵权（包括疏忽或其他）行为中产生，即使
+ * 已被告知发生此类损害的可能性。
  */
 
 #include "server.h"
@@ -33,132 +25,39 @@
 #include <ctype.h>
 
 /* =============================================================================
- * Global state for ACLs
+ * ACL 的全局状态
  * ==========================================================================*/
 
-rax *Users; /* Table mapping usernames to user structures. */
+/* 用户名到用户结构的映射表 */
+rax *Users; 
 
-user *DefaultUser;  /* Global reference to the default user.
-                       Every new connection is associated to it, if no
-                       AUTH or HELLO is used to authenticate with a
-                       different user. */
+/* 默认用户的全局引用。每个新连接都会关联到它,
+ * 除非使用 AUTH 或 HELLO 命令认证为其他用户。 */
+user *DefaultUser;
 
-list *UsersToLoad;  /* This is a list of users found in the configuration file
-                       that we'll need to load in the final stage of Redis
-                       initialization, after all the modules are already
-                       loaded. Every list element is a NULL terminated
-                       array of SDS pointers: the first is the user name,
-                       all the remaining pointers are ACL rules in the same
-                       format as ACLSetUser(). */
-list *ACLLog;       /* Our security log, the user is able to inspect that
-                       using the ACL LOG command .*/
+/* 这是配置文件中找到的需要加载的用户列表,
+ * 我们需要在 Redis 初始化的最后阶段加载它们,
+ * 在所有模块都已加载之后。每个列表元素是一个以 NULL 结尾的
+ * SDS 指针数组:第一个是用户名,
+ * 其余的指针是与 ACLSetUser() 格式相同的 ACL 规则。*/
+list *UsersToLoad;
 
-long long ACLLogEntryCount = 0; /* Number of ACL log entries created */
+/* 我们的安全日志,用户可以使用 ACL LOG 命令查看它 */
+list *ACLLog;
 
-static rax *commandId = NULL; /* Command name to id mapping */
+/* 创建的 ACL 日志条目数量 */
+long long ACLLogEntryCount = 0;
 
-static unsigned long nextid = 0; /* Next command id that has not been assigned */
+/* 命令名称到 id 的映射 */
+static rax *commandId = NULL;
 
-struct ACLCategoryItem {
-    const char *name;
-    uint64_t flag;
-} ACLCommandCategories[] = { /* See redis.conf for details on each category. */
-    {"keyspace", ACL_CATEGORY_KEYSPACE},
-    {"read", ACL_CATEGORY_READ},
-    {"write", ACL_CATEGORY_WRITE},
-    {"set", ACL_CATEGORY_SET},
-    {"sortedset", ACL_CATEGORY_SORTEDSET},
-    {"list", ACL_CATEGORY_LIST},
-    {"hash", ACL_CATEGORY_HASH},
-    {"string", ACL_CATEGORY_STRING},
-    {"bitmap", ACL_CATEGORY_BITMAP},
-    {"hyperloglog", ACL_CATEGORY_HYPERLOGLOG},
-    {"geo", ACL_CATEGORY_GEO},
-    {"stream", ACL_CATEGORY_STREAM},
-    {"pubsub", ACL_CATEGORY_PUBSUB},
-    {"admin", ACL_CATEGORY_ADMIN},
-    {"fast", ACL_CATEGORY_FAST},
-    {"slow", ACL_CATEGORY_SLOW},
-    {"blocking", ACL_CATEGORY_BLOCKING},
-    {"dangerous", ACL_CATEGORY_DANGEROUS},
-    {"connection", ACL_CATEGORY_CONNECTION},
-    {"transaction", ACL_CATEGORY_TRANSACTION},
-    {"scripting", ACL_CATEGORY_SCRIPTING},
-    {NULL,0} /* Terminator. */
-};
+/* 尚未分配的下一个命令 id */
+static unsigned long nextid = 0;
 
-struct ACLUserFlag {
-    const char *name;
-    uint64_t flag;
-} ACLUserFlags[] = {
-    /* Note: the order here dictates the emitted order at ACLDescribeUser */
-    {"on", USER_FLAG_ENABLED},
-    {"off", USER_FLAG_DISABLED},
-    {"nopass", USER_FLAG_NOPASS},
-    {"skip-sanitize-payload", USER_FLAG_SANITIZE_PAYLOAD_SKIP},
-    {"sanitize-payload", USER_FLAG_SANITIZE_PAYLOAD},
-    {NULL,0} /* Terminator. */
-};
-
-struct ACLSelectorFlags {
-    const char *name;
-    uint64_t flag;
-} ACLSelectorFlags[] = {
-    /* Note: the order here dictates the emitted order at ACLDescribeUser */
-    {"allkeys", SELECTOR_FLAG_ALLKEYS},
-    {"allchannels", SELECTOR_FLAG_ALLCHANNELS},
-    {"allcommands", SELECTOR_FLAG_ALLCOMMANDS},
-    {NULL,0} /* Terminator. */
-};
-
-/* ACL selectors are private and not exposed outside of acl.c. */
-typedef struct {
-    uint32_t flags; /* See SELECTOR_FLAG_* */
-    /* The bit in allowed_commands is set if this user has the right to
-     * execute this command.
-     *
-     * If the bit for a given command is NOT set and the command has
-     * allowed first-args, Redis will also check allowed_firstargs in order to
-     * understand if the command can be executed. */
-    uint64_t allowed_commands[USER_COMMAND_BITS_COUNT/64];
-    /* allowed_firstargs is used by ACL rules to block access to a command unless a
-     * specific argv[1] is given.
-     *
-     * For each command ID (corresponding to the command bit set in allowed_commands),
-     * This array points to an array of SDS strings, terminated by a NULL pointer,
-     * with all the first-args that are allowed for this command. When no first-arg
-     * matching is used, the field is just set to NULL to avoid allocating
-     * USER_COMMAND_BITS_COUNT pointers. */
-    sds **allowed_firstargs;
-    list *patterns;  /* A list of allowed key patterns. If this field is NULL
-                        the user cannot mention any key in a command, unless
-                        the flag ALLKEYS is set in the user. */
-    list *channels;  /* A list of allowed Pub/Sub channel patterns. If this
-                        field is NULL the user cannot mention any channel in a
-                        `PUBLISH` or [P][UNSUBSCRIBE] command, unless the flag
-                        ALLCHANNELS is set in the user. */
-    sds command_rules; /* A string representation of the ordered categories and commands, this
-                        * is used to regenerate the original ACL string for display. */
-} aclSelector;
-
-void ACLResetFirstArgsForCommand(aclSelector *selector, unsigned long id);
-void ACLResetFirstArgs(aclSelector *selector);
-void ACLAddAllowedFirstArg(aclSelector *selector, unsigned long id, const char *sub);
-void ACLFreeLogEntry(void *le);
-int ACLSetSelector(aclSelector *selector, const char *op, size_t oplen);
-
-/* The length of the string representation of a hashed password. */
-#define HASH_PASSWORD_LEN (SHA256_BLOCK_SIZE*2)
-
-/* =============================================================================
- * Helper functions for the rest of the ACL implementation
- * ==========================================================================*/
-
-/* Return zero if strings are the same, non-zero if they are not.
- * The comparison is performed in a way that prevents an attacker to obtain
- * information about the nature of the strings just monitoring the execution
- * time of the function. Note: The two strings must be the same length.
- */
+/* 比较两个字符串是否相同,返回零表示相同,非零表示不同。
+ * 比较以一种防止攻击者通过监控函数执行时间来获取
+ * 字符串性质信息的方式进行。
+ * 注意:两个字符串必须长度相同。*/
 int time_independent_strcmp(char *a, char *b, int len) {
     int diff = 0;
     for (int j = 0; j < len; j++) {
@@ -167,8 +66,8 @@ int time_independent_strcmp(char *a, char *b, int len) {
     return diff; /* If zero strings are the same. */
 }
 
-/* Given an SDS string, returns the SHA256 hex representation as a
- * new SDS string. */
+/* 给定一个 SDS 字符串,返回其 SHA256 十六进制表示形式,
+ * 作为一个新的 SDS 字符串。*/
 sds ACLHashPassword(unsigned char *cleartext, size_t len) {
     SHA256_CTX ctx;
     unsigned char hash[SHA256_BLOCK_SIZE];
@@ -186,8 +85,8 @@ sds ACLHashPassword(unsigned char *cleartext, size_t len) {
     return sdsnewlen(hex,HASH_PASSWORD_LEN);
 }
 
-/* Given a hash and the hash length, returns C_OK if it is a valid password
- * hash, or C_ERR otherwise. */
+/* 给定一个哈希和哈希长度,如果它是一个有效的密码哈希,
+ * 则返回 C_OK,否则返回 C_ERR。*/
 int ACLCheckPasswordHash(unsigned char *hash, int hashlen) {
     if (hashlen != HASH_PASSWORD_LEN) {
         return C_ERR;
@@ -206,14 +105,13 @@ int ACLCheckPasswordHash(unsigned char *hash, int hashlen) {
 }
 
 /* =============================================================================
- * Low level ACL API
+ * 低级 ACL API
  * ==========================================================================*/
 
-/* Return 1 if the specified string contains spaces or null characters.
- * We do this for usernames and key patterns for simpler rewriting of
- * ACL rules, presentation on ACL list, and to avoid subtle security bugs
- * that may arise from parsing the rules in presence of escapes.
- * The function returns 0 if the string has no spaces. */
+/* 如果指定的字符串包含空格或空字符,返回 1。
+ * 我们这样做是为了简化 ACL 规则的重写、ACL list 的展示,
+ * 并避免在解析带有转义的规则时可能出现的微妙安全漏洞。
+ * 如果字符串没有空格,函数返回 0。*/
 int ACLStringHasSpaces(const char *s, size_t len) {
     for (size_t i = 0; i < len; i++) {
         if (isspace(s[i]) || s[i] == 0) return 1;
@@ -221,8 +119,7 @@ int ACLStringHasSpaces(const char *s, size_t len) {
     return 0;
 }
 
-/* Given the category name the command returns the corresponding flag, or
- * zero if there is no match. */
+/* 给定类别名称,命令返回相应的标志,如果没有匹配则返回零。*/
 uint64_t ACLGetCommandCategoryFlagByName(const char *name) {
     for (int j = 0; ACLCommandCategories[j].flag != 0; j++) {
         if (!strcasecmp(name,ACLCommandCategories[j].name)) {
@@ -232,38 +129,36 @@ uint64_t ACLGetCommandCategoryFlagByName(const char *name) {
     return 0; /* No match. */
 }
 
-/* Method for searching for a user within a list of user definitions. The
- * list contains an array of user arguments, and we are only
- * searching the first argument, the username, for a match. */
+/* 用于搜索用户定义列表的方法。该列表包含用户参数数组,
+ * 我们只搜索第一个参数,即用户名,是否匹配。*/
 int ACLListMatchLoadedUser(void *definition, void *user) {
     sds *user_definition = definition;
     return sdscmp(user_definition[0], user) == 0;
 }
 
-/* Method for passwords/pattern comparison used for the user->passwords list
- * so that we can search for items with listSearchKey(). */
+/* 用于用户->密码/模式列表的密码/模式比较方法,
+ * 以便我们可以使用 listSearchKey() 搜索项。*/
 int ACLListMatchSds(void *a, void *b) {
     return sdscmp(a,b) == 0;
 }
 
-/* Method to free list elements from ACL users password/patterns lists. */
+/* 用于释放 ACL 用户密码/模式列表元素的方法。*/
 void ACLListFreeSds(void *item) {
     sdsfree(item);
 }
 
-/* Method to duplicate list elements from ACL users password/patterns lists. */
+/* 用于复制 ACL 用户密码/模式列表元素的方法。*/
 void *ACLListDupSds(void *item) {
     return sdsdup(item);
 }
 
-/* Structure used for handling key patterns with different key
- * based permissions. */
+/* 用于处理具有不同基于键的权限的键模式的结构。*/
 typedef struct {
     int flags; /* The CMD_KEYS_* flags for this key pattern */
     sds pattern; /* The pattern to match keys against */
 } keyPattern;
 
-/* Create a new key pattern. */
+/* 创建一个新的键模式。*/
 keyPattern *ACLKeyPatternCreate(sds pattern, int flags) {
     keyPattern *new = (keyPattern *) zmalloc(sizeof(keyPattern));
     new->pattern = pattern;
@@ -271,31 +166,30 @@ keyPattern *ACLKeyPatternCreate(sds pattern, int flags) {
     return new;
 }
 
-/* Free a key pattern and internal structures. */
+/* 释放键模式和内部结构。*/
 void ACLKeyPatternFree(keyPattern *pattern) {
     sdsfree(pattern->pattern);
     zfree(pattern);
 }
 
-/* Method for passwords/pattern comparison used for the user->passwords list
- * so that we can search for items with listSearchKey(). */
+/* 用于用户->密码/模式列表的密码/模式比较方法,
+ * 以便我们可以使用 listSearchKey() 搜索项。*/
 int ACLListMatchKeyPattern(void *a, void *b) {
     return sdscmp(((keyPattern *) a)->pattern,((keyPattern *) b)->pattern) == 0;
 }
 
-/* Method to free list elements from ACL users password/patterns lists. */
+/* 用于释放 ACL 用户密码/模式列表元素的方法。*/
 void ACLListFreeKeyPattern(void *item) {
     ACLKeyPatternFree(item);
 }
 
-/* Method to duplicate list elements from ACL users password/patterns lists. */
+/* 用于复制 ACL 用户密码/模式列表元素的方法。*/
 void *ACLListDupKeyPattern(void *item) {
     keyPattern *old = (keyPattern *) item;
     return ACLKeyPatternCreate(sdsdup(old->pattern), old->flags);
 }
 
-/* Append the string representation of a key pattern onto the
- * provided base string. */
+/* 将键模式的字符串表示附加到提供的基础字符串上。*/
 sds sdsCatPatternString(sds base, keyPattern *pat) {
     if (pat->flags == ACL_ALL_PERMISSION) {
         base = sdscatlen(base,"~",1);
@@ -309,8 +203,8 @@ sds sdsCatPatternString(sds base, keyPattern *pat) {
     return sdscatsds(base, pat->pattern);
 }
 
-/* Create an empty selector with the provided set of initial
- * flags. The selector will be default have no permissions. */
+/* 创建一个空的选择器,并使用提供的初始标志集。
+ * 选择器将默认没有权限。*/
 aclSelector *ACLCreateSelector(int flags) {
     aclSelector *selector = zmalloc(sizeof(aclSelector));
     selector->flags = flags | server.acl_pubsub_default;
@@ -330,7 +224,7 @@ aclSelector *ACLCreateSelector(int flags) {
     return selector;
 }
 
-/* Cleanup the provided selector, including all interior structures. */
+/* 清理提供的选择器,包括所有内部结构。*/
 void ACLFreeSelector(aclSelector *selector) {
     listRelease(selector->patterns);
     listRelease(selector->channels);
@@ -339,7 +233,7 @@ void ACLFreeSelector(aclSelector *selector) {
     zfree(selector);
 }
 
-/* Create an exact copy of the provided selector. */
+/* 创建提供的选择器的精确副本。*/
 aclSelector *ACLCopySelector(aclSelector *src) {
     aclSelector *dst = zmalloc(sizeof(aclSelector));
     dst->flags = src->flags;
@@ -361,19 +255,19 @@ aclSelector *ACLCopySelector(aclSelector *src) {
     return dst;
 }
 
-/* List method for freeing a selector */
+/* 用于释放选择器的列表方法*/
 void ACLListFreeSelector(void *a) {
     ACLFreeSelector((aclSelector *) a);
 }
 
-/* List method for duplicating a selector */
+/* 用于复制选择器的列表方法*/
 void *ACLListDuplicateSelector(void *src) {
     return ACLCopySelector((aclSelector *)src);
 }
 
-/* All users have an implicit root selector which
- * provides backwards compatibility to the old ACLs-
- * permissions. */
+/* 所有用户都有一个隐式的根选择器,
+ * 它提供了对旧 ACLs-
+ * 权限的向后兼容性。*/
 aclSelector *ACLUserGetRootSelector(user *u) {
     serverAssert(listLength(u->selectors));
     aclSelector *s = (aclSelector *) listNodeValue(listFirst(u->selectors));
@@ -381,11 +275,10 @@ aclSelector *ACLUserGetRootSelector(user *u) {
     return s;
 }
 
-/* Create a new user with the specified name, store it in the list
- * of users (the Users global radix tree), and returns a reference to
- * the structure representing the user.
+/* 创建一个具有指定名称的新用户,将其存储在用户列表中(Users 全局基数树),
+ * 并返回一个引用该用户结构的指针。
  *
- * If the user with such name already exists NULL is returned. */
+ * 如果已存在具有该名称的用户,则返回 NULL。*/
 user *ACLCreateUser(const char *name, size_t namelen) {
     if (raxFind(Users,(unsigned char*)name,namelen) != raxNotFound) return NULL;
     user *u = zmalloc(sizeof(*u));
@@ -410,10 +303,10 @@ user *ACLCreateUser(const char *name, size_t namelen) {
     return u;
 }
 
-/* This function should be called when we need an unlinked "fake" user
- * we can use in order to validate ACL rules or for other similar reasons.
- * The user will not get linked to the Users radix tree. The returned
- * user should be released with ACLFreeUser() as usually. */
+/* 当我们需要一个未链接的"假"用户时,
+ * 我们可以使用它来验证 ACL 规则或进行其他类似的操作。
+ * 用户不会链接到 Users 基数树。返回的用户应该使用 ACLFreeUser() 释放,
+ * 就像通常一样。*/
 user *ACLCreateUnlinkedUser(void) {
     char username[64];
     for (int j = 0; ; j++) {
@@ -427,8 +320,8 @@ user *ACLCreateUnlinkedUser(void) {
     }
 }
 
-/* Release the memory used by the user structure. Note that this function
- * will not remove the user from the Users global radix tree. */
+/* 释放用户结构使用的内存。注意,此函数
+ * 不会从 Users 全局基数树中删除用户。*/
 void ACLFreeUser(user *u) {
     sdsfree(u->name);
     if (u->acl_string) {
@@ -440,9 +333,8 @@ void ACLFreeUser(user *u) {
     zfree(u);
 }
 
-/* When a user is deleted we need to cycle the active
- * connections in order to kill all the pending ones that
- * are authenticated with such user. */
+/* 当用户被删除时,我们需要循环遍历活动连接,
+ * 以便终止所有使用该用户进行身份验证的挂起连接。*/
 void ACLFreeUserAndKillClients(user *u) {
     listIter li;
     listNode *ln;
@@ -450,16 +342,15 @@ void ACLFreeUserAndKillClients(user *u) {
     while ((ln = listNext(&li)) != NULL) {
         client *c = listNodeValue(ln);
         if (c->user == u) {
-            /* We'll free the connection asynchronously, so
-             * in theory to set a different user is not needed.
-             * However if there are bugs in Redis, soon or later
-             * this may result in some security hole: it's much
-             * more defensive to set the default user and put
-             * it in non authenticated mode. */
+            /* 我们将异步释放连接,所以
+             * 从技术上讲,不需要设置不同的用户。
+             * 但是,如果 Redis 中有错误,不久之后
+             * 这可能会导致一些安全漏洞:更加防御性地设置默认用户并将其置于
+             * 未经身份验证模式。*/
             c->user = DefaultUser;
             c->authenticated = 0;
-            /* We will write replies to this client later, so we can't
-             * close it directly even if async. */
+            /* 我们将在此客户端写入回复,所以我们不能
+             * 直接关闭它,即使是异步的。*/
             if (c == server.current_client) {
                 c->flags |= CLIENT_CLOSE_AFTER_COMMAND;
             } else {
@@ -470,9 +361,8 @@ void ACLFreeUserAndKillClients(user *u) {
     ACLFreeUser(u);
 }
 
-/* Copy the user ACL rules from the source user 'src' to the destination
- * user 'dst' so that at the end of the process they'll have exactly the
- * same rules (but the names will continue to be the original ones). */
+/* 将用户 ACL 规则从源用户 'src' 复制到目标用户 'dst',
+ * 这样最终它们将具有完全相同的规则(但名称将继续是原始名称)。*/
 void ACLCopyUser(user *dst, user *src) {
     listRelease(dst->passwords);
     listRelease(dst->selectors);
@@ -489,18 +379,18 @@ void ACLCopyUser(user *dst, user *src) {
     }
 }
 
-/* Free all the users registered in the radix tree 'users' and free the
- * radix tree itself. */
+/* 释放存储在基数树 'users' 中的所有用户,并释放
+ * 基数树本身。*/
 void ACLFreeUsersSet(rax *users) {
     raxFreeWithCallback(users,(void(*)(void*))ACLFreeUserAndKillClients);
 }
 
-/* Given a command ID, this function set by reference 'word' and 'bit'
- * so that user->allowed_commands[word] will address the right word
- * where the corresponding bit for the provided ID is stored, and
- * so that user->allowed_commands[word]&bit will identify that specific
- * bit. The function returns C_ERR in case the specified ID overflows
- * the bitmap in the user representation. */
+/* 给定命令 ID,此函数设置 'word' 和 'bit' 的引用,
+ * 以便 user->allowed_commands[word] 将地址正确的单词,
+ * 其中包含指定 ID 的相应位,并且
+ * 以便 user->allowed_commands[word]&bit 将标识该特定位。
+ * 如果指定的 ID 溢出了用户内部表示,
+ * 该函数将返回 C_ERR。*/
 int ACLGetCommandBitCoordinates(uint64_t id, uint64_t *word, uint64_t *bit) {
     if (id >= USER_COMMAND_BITS_COUNT) return C_ERR;
     *word = id / sizeof(uint64_t) / 8;
@@ -508,31 +398,31 @@ int ACLGetCommandBitCoordinates(uint64_t id, uint64_t *word, uint64_t *bit) {
     return C_OK;
 }
 
-/* Check if the specified command bit is set for the specified user.
- * The function returns 1 is the bit is set or 0 if it is not.
- * Note that this function does not check the ALLCOMMANDS flag of the user
- * but just the lowlevel bitmask.
+/* 检查指定的命令位是否设置为指定的用户。
+ * 如果设置了该位,该函数返回 1,如果未设置则返回 0。
+ * 注意,此函数不检查用户的 ALLCOMMANDS 标志,
+ * 而只是低级位掩码。
  *
- * If the bit overflows the user internal representation, zero is returned
- * in order to disallow the execution of the command in such edge case. */
+ * 如果位溢出了用户内部表示,则返回零,
+ * 以避免在这种边缘情况下执行命令。*/
 int ACLGetSelectorCommandBit(const aclSelector *selector, unsigned long id) {
     uint64_t word, bit;
     if (ACLGetCommandBitCoordinates(id,&word,&bit) == C_ERR) return 0;
     return (selector->allowed_commands[word] & bit) != 0;
 }
 
-/* When +@all or allcommands is given, we set a reserved bit as well that we
- * can later test, to see if the user has the right to execute "future commands",
- * that is, commands loaded later via modules. */
+/* 当给出 +@all 或 allcommands 时,我们会设置一个保留位,
+ * 以便我们以后可以测试用户是否有权执行"未来命令",
+ * 即通过模块加载的命令。*/
 int ACLSelectorCanExecuteFutureCommands(aclSelector *selector) {
     return ACLGetSelectorCommandBit(selector,USER_COMMAND_BITS_COUNT-1);
 }
 
-/* Set the specified command bit for the specified user to 'value' (0 or 1).
- * If the bit overflows the user internal representation, no operation
- * is performed. As a side effect of calling this function with a value of
- * zero, the user flag ALLCOMMANDS is cleared since it is no longer possible
- * to skip the command bit explicit test. */
+/* 将指定用户的指定命令位设置为 'value' (0 或 1)。
+ * 如果位溢出了用户内部表示,则不执行任何操作。
+ * 作为调用此函数的副作用,如果值为零,
+ * 用户标志 ALLCOMMANDS 将被清除,因为不再可能跳过
+ * 命令位显式测试。*/
 void ACLSetSelectorCommandBit(aclSelector *selector, unsigned long id, int value) {
     uint64_t word, bit;
     if (ACLGetCommandBitCoordinates(id,&word,&bit) == C_ERR) return;
@@ -544,9 +434,8 @@ void ACLSetSelectorCommandBit(aclSelector *selector, unsigned long id, int value
     }
 }
 
-/* Remove a rule from the retained command rules. Always match rules
- * verbatim, but also remove subcommand rules if we are adding or removing the 
- * entire command. */
+/* 从保留的命令规则中删除一条规则。始终按原样匹配规则,
+ * 但也会删除子命令规则,如果我们正在添加或删除整个命令。*/
 void ACLSelectorRemoveCommandRule(aclSelector *selector, sds new_rule) {
     size_t new_len = sdslen(new_rule);
     char *existing_rule = selector->command_rules;
@@ -2205,34 +2094,29 @@ int ACLLoadConfiguredUsers(void) {
     return C_OK;
 }
 
-/* This function loads the ACL from the specified filename: every line
- * is validated and should be either empty or in the format used to specify
- * users in the redis.conf configuration or in the ACL file, that is:
+/* 这个函数从指定的文件名加载 ACL:每一行
+ * 都会被验证,应该是空行或者是在 redis.conf 配置文件或 ACL 文件中指定用户的格式,即:
  *
  *  user <username> ... rules ...
  *
- * Note that this function considers comments starting with '#' as errors
- * because the ACL file is meant to be rewritten, and comments would be
- * lost after the rewrite. Yet empty lines are allowed to avoid being too
- * strict.
+ * 注意,此函数将 '#' 开头的行视为错误,因为 ACL 文件是用于重写的,
+ * 注释将在重写后丢失。但是,允许空行以避免过于严格。
  *
- * One important part of implementing ACL LOAD, that uses this function, is
- * to avoid ending with broken rules if the ACL file is invalid for some
- * reason, so the function will attempt to validate the rules before loading
- * each user. For every line that will be found broken the function will
- * collect an error message.
+ * 实现 ACL LOAD 的一个重要部分,使用此函数,是
+ * 如果 ACL 文件由于某种原因无效,避免以损坏的规则结束。
+ * 因此,函数将尝试在加载每个用户之前验证规则。
+ * 对于将被发现有问题的每一行,函数将收集一条错误消息。
  *
- * IMPORTANT: If there is at least a single error, nothing will be loaded
- * and the rules will remain exactly as they were.
+ * 重要提示:如果有任何错误,将不会加载任何内容,
+ * 规则将保持不变,就像它们原来的那样。
  *
- * At the end of the process, if no errors were found in the whole file then
- * NULL is returned. Otherwise an SDS string describing in a single line
- * a description of all the issues found is returned. */
+ * 在整个过程结束时,如果在整个文件中没有找到任何错误,
+ * 则返回 NULL。否则,返回一个 SDS 字符串,描述在单行中发现的所有问题。*/
 sds ACLLoadFromFile(const char *filename) {
     FILE *fp;
     char buf[1024];
 
-    /* Open the ACL file. */
+    /* 打开 ACL 文件。*/
     if ((fp = fopen(filename,"r")) == NULL) {
         sds errors = sdscatprintf(sdsempty(),
             "Error loading ACLs, opening file '%s': %s",
@@ -2240,25 +2124,24 @@ sds ACLLoadFromFile(const char *filename) {
         return errors;
     }
 
-    /* Load the whole file as a single string in memory. */
+    /* 将整个文件作为单个字符串加载到内存中。*/
     sds acls = sdsempty();
     while(fgets(buf,sizeof(buf),fp) != NULL)
         acls = sdscat(acls,buf);
     fclose(fp);
 
-    /* Split the file into lines and attempt to load each line. */
+    /* 将文件拆分为行,并尝试加载每一行。*/
     int totlines;
     sds *lines, errors = sdsempty();
     lines = sdssplitlen(acls,strlen(acls),"\n",1,&totlines);
     sdsfree(acls);
 
-    /* We do all the loading in a fresh instance of the Users radix tree,
-     * so if there are errors loading the ACL file we can rollback to the
-     * old version. */
+    /* 我们将所有加载操作都放在用户基数树的新实例中,
+     * 所以如果 ACL 文件有错误,我们可以回滚到旧版本。*/
     rax *old_users = Users;
     Users = raxNew();
 
-    /* Load each line of the file. */
+    /* 加载文件的每一行。*/
     for (int i = 0; i < totlines; i++) {
         sds *argv;
         int argc;
@@ -2266,10 +2149,10 @@ sds ACLLoadFromFile(const char *filename) {
 
         lines[i] = sdstrim(lines[i]," \t\r\n");
 
-        /* Skip blank lines */
+        /* 跳过空行*/
         if (lines[i][0] == '\0') continue;
 
-        /* Split into arguments */
+        /* 分割为参数*/
         argv = sdssplitlen(lines[i],sdslen(lines[i])," ",1,&argc);
         if (argv == NULL) {
             errors = sdscatprintf(errors,
@@ -2278,13 +2161,13 @@ sds ACLLoadFromFile(const char *filename) {
             continue;
         }
 
-        /* Skip this line if the resulting command vector is empty. */
+        /* 如果结果命令向量为空,则跳过此行。*/
         if (argc == 0) {
             sdsfreesplitres(argv,argc);
             continue;
         }
 
-        /* The line should start with the "user" keyword. */
+        /* 该行应以 "user" 关键字开头。*/
         if (strcmp(argv[0],"user") || argc < 2) {
             errors = sdscatprintf(errors,
                      "%s:%d should start with user keyword followed "
@@ -2294,7 +2177,7 @@ sds ACLLoadFromFile(const char *filename) {
             continue;
         }
 
-        /* Spaces are not allowed in usernames. */
+        /* 用户名中不允许有空格。*/
         if (ACLStringHasSpaces(argv[1],sdslen(argv[1]))) {
             errors = sdscatprintf(errors,
                      "'%s:%d: username '%s' contains invalid characters. ",
@@ -2305,17 +2188,16 @@ sds ACLLoadFromFile(const char *filename) {
 
         user *u = ACLCreateUser(argv[1],sdslen(argv[1]));
 
-        /* If the user already exists we assume it's an error and abort. */
+        /* 如果用户已存在,我们假设这是一个错误,并中止。*/
         if (!u) {
             errors = sdscatprintf(errors,"WARNING: Duplicate user '%s' found on line %d. ", argv[1], linenum);
             sdsfreesplitres(argv,argc);
             continue;
         }
 
-        /* Finally process the options and validate they can
-         * be cleanly applied to the user. If any option fails
-         * to apply, the other values won't be applied since
-         * all the pending changes will get dropped. */
+        /* 最后处理选项并验证它们是否可以
+         * 干净地应用于用户。如果任何选项无法应用,
+         * 其他值将不会应用,因为所有挂起的更改都将被丢弃。*/
         int merged_argc;
         sds *acl_args = ACLMergeSelectorArguments(argv + 2, argc - 2, &merged_argc, NULL);
         if (!acl_args) {
@@ -2330,14 +2212,14 @@ sds ACLLoadFromFile(const char *filename) {
             if (ACLSetUser(u,acl_args[j],sdslen(acl_args[j])) != C_OK) {
                 const char *errmsg = ACLSetUserStringError();
                 if (errno == ENOENT) {
-                    /* For missing commands, we print out more information since
-                     * it shouldn't contain any sensitive information. */
+                    /* 对于缺少的命令,我们会打印出更多信息,因为
+                     * 它不应包含任何敏感信息。*/
                     errors = sdscatprintf(errors,
                             "%s:%d: Error in applying operation '%s': %s. ",
                             server.acl_filename, linenum, acl_args[j], errmsg);
                 } else if (syntax_error == 0) {
-                    /* For all other errors, only print out the first error encountered
-                     * since it might affect future operations. */
+                    /* 对于所有其他错误,只打印出第一个遇到的错误,因为它可能会影响
+                     * 未来的操作。*/
                     errors = sdscatprintf(errors,
                             "%s:%d: %s. ",
                             server.acl_filename, linenum, errmsg);
@@ -2349,9 +2231,8 @@ sds ACLLoadFromFile(const char *filename) {
         for (int i = 0; i < merged_argc; i++) sdsfree(acl_args[i]);
         zfree(acl_args);
 
-        /* Apply the rule to the new users set only if so far there
-         * are no errors, otherwise it's useless since we are going
-         * to discard the new users set anyway. */
+        /* 仅当没有错误时,将规则应用于新用户集,否则它是无用的,
+         * 因为我们将丢弃新用户集。*/
         if (sdslen(errors) != 0) {
             sdsfreesplitres(argv,argc);
             continue;
@@ -2362,11 +2243,10 @@ sds ACLLoadFromFile(const char *filename) {
 
     sdsfreesplitres(lines,totlines);
 
-    /* Check if we found errors and react accordingly. */
+    /* 检查是否找到错误并做出相应的反应。*/
     if (sdslen(errors) == 0) {
-        /* The default user pointer is referenced in different places: instead
-         * of replacing such occurrences it is much simpler to copy the new
-         * default user configuration in the old one. */
+        /* 默认用户指针在各个地方被引用:直接替换这些引用是更简单的,
+         * 而不是复制新的默认用户配置到旧的用户中。*/
         user *new_default = ACLGetUserByName("default",7);
         if (!new_default) {
             new_default = ACLCreateDefaultUser();
@@ -2387,23 +2267,22 @@ sds ACLLoadFromFile(const char *filename) {
     }
 }
 
-/* Generate a copy of the ACLs currently in memory in the specified filename.
- * Returns C_OK on success or C_ERR if there was an error during the I/O.
- * When C_ERR is returned a log is produced with hints about the issue. */
+/* 将当前内存中的 ACL 生成一份副本,并保存到指定的文件名中。
+ * 如果 I/O 过程中出现错误,返回 C_ERR,否则返回 C_OK。
+ * 当返回 C_ERR 时,会产生一条日志,其中包含有关问题的提示。*/
 int ACLSaveToFile(const char *filename) {
     sds acl = sdsempty();
     int fd = -1;
     sds tmpfilename = NULL;
     int retval = C_ERR;
 
-    /* Let's generate an SDS string containing the new version of the
-     * ACL file. */
+    /* 生成一个包含新版本 ACL 文件的 SDS 字符串。*/
     raxIterator ri;
     raxStart(&ri,Users);
     raxSeek(&ri,"^",NULL,0);
     while(raxNext(&ri)) {
         user *u = ri.data;
-        /* Return information in the configuration file format. */
+        /* 以配置文件格式返回信息。*/
         sds user = sdsnew("user ");
         user = sdscatsds(user,u->name);
         user = sdscatlen(user," ",1);
@@ -2416,7 +2295,7 @@ int ACLSaveToFile(const char *filename) {
     }
     raxStop(&ri);
 
-    /* Create a temp file with the new content. */
+    /* 创建一个临时文件,其中包含新内容。*/
     tmpfilename = sdsnew(filename);
     tmpfilename = sdscatfmt(tmpfilename,".tmp-%i-%I",
         (int) getpid(),commandTimeSnapshot());
@@ -2426,7 +2305,7 @@ int ACLSaveToFile(const char *filename) {
         goto cleanup;
     }
 
-    /* Write it. */
+    /* 写入它。*/
     size_t offset = 0;
     while (offset < sdslen(acl)) {
         ssize_t written_bytes = write(fd,acl + offset,sdslen(acl) - offset);
@@ -2445,7 +2324,7 @@ int ACLSaveToFile(const char *filename) {
     }
     close(fd); fd = -1;
 
-    /* Let's replace the new file with the old one. */
+    /* 用新文件替换旧文件。*/
     if (rename(tmpfilename,filename) == -1) {
         serverLog(LL_WARNING,"Renaming ACL file for ACL SAVE: %s",
             strerror(errno));
@@ -2457,7 +2336,7 @@ int ACLSaveToFile(const char *filename) {
         goto cleanup;
     }
     sdsfree(tmpfilename); tmpfilename = NULL;
-    retval = C_OK; /* If we reached this point, everything is fine. */
+    retval = C_OK; /* 如果我们到达这一点,一切都正常。*/
 
 cleanup:
     if (fd != -1) close(fd);
@@ -2467,11 +2346,9 @@ cleanup:
     return retval;
 }
 
-/* This function is called once the server is already running, modules are
- * loaded, and we are ready to start, in order to load the ACLs either from
- * the pending list of users defined in redis.conf, or from the ACL file.
- * The function will just exit with an error if the user is trying to mix
- * both the loading methods. */
+/* 此函数在服务器已经运行,模块已加载,我们准备开始时调用,
+ * 以从 redis.conf 中配置的用户列表或 ACL 文件加载 ACL。
+ * 该函数将在尝试同时使用这两种加载方法时退出并出错。*/
 void ACLLoadUsersAtStartup(void) {
     if (server.acl_filename[0] != '\0' && listLength(UsersToLoad) != 0) {
         serverLog(LL_WARNING,
@@ -2506,23 +2383,22 @@ void ACLLoadUsersAtStartup(void) {
 
 #define ACL_LOG_GROUPING_MAX_TIME_DELTA 60000
 
-/* This structure defines an entry inside the ACL log. */
+/* 此结构定义了 ACL 日志中的一个条目。*/
 typedef struct ACLLogEntry {
-    uint64_t count;     /* Number of times this happened recently. */
-    int reason;         /* Reason for denying the command. ACL_DENIED_*. */
-    int context;        /* Toplevel, Lua or MULTI/EXEC? ACL_LOG_CTX_*. */
-    sds object;         /* The key name or command name. */
-    sds username;       /* User the client is authenticated with. */
-    mstime_t ctime;     /* Milliseconds time of last update to this entry. */
-    sds cinfo;          /* Client info (last client if updated). */
-    long long entry_id;         /* The pair (entry_id, timestamp_created) is a unique identifier of this entry 
-                                  * in case the node dies and is restarted, it can detect that if it's a new series. */
-    mstime_t timestamp_created; /* UNIX time in milliseconds at the time of this entry's creation. */
+    uint64_t count;     /* 最近发生的次数。*/
+    int reason;         /* 拒绝命令的原因。ACL_DENIED_*. */
+    int context;        /* 顶层、Lua 或 MULTI/EXEC？ACL_LOG_CTX_*. */
+    sds object;         /* 键名或命令名。*/
+    sds username;       /* 客户端已经认证的用户。*/
+    mstime_t ctime;     /* 最后更新此条目的毫秒时间。*/
+    sds cinfo;          /* 客户端信息(最后一个客户端如果已更新)。*/
+    long long entry_id;         /* 此条目的(entry_id, timestamp_created)对是一个唯一标识符
+                                  * 如果节点死亡并重新启动,它可以检测到这是否是一个新系列。*/
+    mstime_t timestamp_created; /* 此条目创建时的 UNIX 时间(毫秒)。*/
 } ACLLogEntry;
 
-/* This function will check if ACL entries 'a' and 'b' are similar enough
- * that we should actually update the existing entry in our ACL log instead
- * of creating a new one. */
+/* 此函数将检查 ACL 条目 'a' 和 'b' 是否足够相似,
+ * 以便我们实际上应该更新现有的 ACL 日志条目,而不是创建一个新条目。*/
 int ACLLogMatchEntry(ACLLogEntry *a, ACLLogEntry *b) {
     if (a->reason != b->reason) return 0;
     if (a->context != b->context) return 0;
@@ -2534,7 +2410,7 @@ int ACLLogMatchEntry(ACLLogEntry *a, ACLLogEntry *b) {
     return 1;
 }
 
-/* Release an ACL log entry. */
+/* 释放 ACL 日志条目。*/
 void ACLFreeLogEntry(void *leptr) {
     ACLLogEntry *le = leptr;
     sdsfree(le->object);
@@ -2543,7 +2419,7 @@ void ACLFreeLogEntry(void *leptr) {
     zfree(le);
 }
 
-/* Update the relevant counter by the reason */
+/* 根据原因更新相关计数器*/
 void ACLUpdateInfoMetrics(int reason){
     if (reason == ACL_DENIED_AUTH) {
         server.acl_info.user_auth_failures++;
@@ -2558,26 +2434,21 @@ void ACLUpdateInfoMetrics(int reason){
     }
 }
 
-/* Adds a new entry in the ACL log, making sure to delete the old entry
- * if we reach the maximum length allowed for the log. This function attempts
- * to find similar entries in the current log in order to bump the counter of
- * the log entry instead of creating many entries for very similar ACL
- * rules issues.
+/* 添加一个新条目到 ACL 日志中,确保在达到允许的日志最大长度时删除旧条目。
+ * 此函数尝试在当前日志中查找类似的条目,以便在实际上只需更新现有条目而不是创建新条目时。
  *
- * The argpos argument is used when the reason is ACL_DENIED_KEY or 
- * ACL_DENIED_CHANNEL, since it allows the function to log the key or channel
- * name that caused the problem.
+ * argpos 参数在 reason 是 ACL_DENIED_KEY 或 ACL_DENIED_CHANNEL 时使用,
+ * 因为它允许函数记录导致问题的键或通道名称。
  *
- * The last 2 arguments are a manual override to be used, instead of any of the automatic
- * ones which depend on the client and reason arguments (use NULL for default).
+ * 最后 2 个参数是用于覆盖任何依赖于客户端和原因参数的自动覆盖(使用 NULL 以使用默认值)。
  *
- * If `object` is not NULL, this functions takes over it.
+ * 如果 `object` 不是 NULL,此函数会接管它。
  */
 void addACLLogEntry(client *c, int reason, int context, int argpos, sds username, sds object) {
-    /* Update ACL info metrics */
+    /* 更新 ACL 信息指标*/
     ACLUpdateInfoMetrics(reason);
     
-    /* Create a new entry. */
+    /* 创建一个新条目。*/
     struct ACLLogEntry *le = zmalloc(sizeof(*le));
     le->count = 1;
     le->reason = reason;
@@ -2598,15 +2469,14 @@ void addACLLogEntry(client *c, int reason, int context, int argpos, sds username
         }
     }
 
-    /* if we have a real client from the network, use it (could be missing on module timers) */
+    /* 如果我们有一个来自网络的真实客户端,使用它(可能在模块定时器上缺失)*/
     client *realclient = server.current_client? server.current_client : c;
 
     le->cinfo = catClientInfoString(sdsempty(),realclient);
     le->context = context;
 
-    /* Try to match this entry with past ones, to see if we can just
-     * update an existing entry instead of creating a new one. */
-    long toscan = 10; /* Do a limited work trying to find duplicated. */
+    /* 尝试将此条目与过去的条目匹配,以查看我们是否可以只更新现有条目,而不是创建一个新条目。*/
+    long toscan = 10; /* 只做有限的工作来查找重复的。*/
     listIter li;
     listNode *ln;
     listRewind(ACLLog,&li);
@@ -2621,23 +2491,21 @@ void addACLLogEntry(client *c, int reason, int context, int argpos, sds username
         }
     }
 
-    /* If there is a match update the entry, otherwise add it as a
-     * new one. */
+    /* 如果有匹配,更新条目,否则添加为新条目。*/
     if (match) {
-        /* We update a few fields of the existing entry and bump the
-         * counter of events for this entry. */
+        /* 我们更新现有条目的一些字段,并增加此条目的事件计数器。*/
         sdsfree(match->cinfo);
         match->cinfo = le->cinfo;
         match->ctime = le->ctime;
         match->count++;
 
-        /* Release the old entry. */
+        /* 释放旧条目。*/
         le->cinfo = NULL;
         ACLFreeLogEntry(le);
     } else {
-        /* Add it to our list of entries. We'll have to trim the list
-         * to its maximum size. */
-        ACLLogEntryCount++; /* Incrementing the entry_id count to make each record in the log unique. */
+        /* 将其添加到我们的条目列表中。我们需要修剪列表
+         * 到其最大长度。*/
+        ACLLogEntryCount++; /* 增加 entry_id 计数以使日志中的每个记录都是唯一的。*/
         listAddNodeHead(ACLLog, le);
         while(listLength(ACLLog) > server.acllog_max_len) {
             listNode *ln = listLast(ACLLog);
