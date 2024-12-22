@@ -1,5 +1,7 @@
 #!/bin/bash
 
+root_dir=/home/user00/cluster
+
 # 定义要停止的 Redis 实例的端口号
 redis_ports=(7001 7002 7003 7011 7012 7013 7021 7022 7023)
 
