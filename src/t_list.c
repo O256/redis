@@ -96,12 +96,12 @@ static void listTypeTryConvertQuicklist(robj *o, int shrinking, beforeConvertCB 
         return;
 
     /* Check the length or size of the quicklist is below the limit. */
-    quicklistNodeLimit(server.list_max_listpack_size, &sz_limit, &count_limit);
+    quicklistNodeLimit(server.list_max_listpack_size, &sz_limit, &count_limit); // 1024, 1024
     if (shrinking) {
         sz_limit /= 2;
         count_limit /= 2;
     }
-    if (ql->head->sz > sz_limit || ql->count > count_limit) return;
+    if (ql->head->sz > sz_limit || ql->count > count_limit) return; 
 
     /* Invoke callback before conversion. */
     if (fn) fn(data);

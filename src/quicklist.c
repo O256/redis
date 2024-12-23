@@ -462,14 +462,15 @@ REDIS_STATIC void _quicklistInsertNodeAfter(quicklist *quicklist,
 
 #define sizeMeetsSafetyLimit(sz) ((sz) <= SIZE_SAFETY_LIMIT)
 
-/* Calculate the size limit or length limit of the quicklist node
- * based on 'fill', and is also used to limit list listpack. */
+/* 计算quicklist节点的大小限制或长度限制
+ * 基于'fill'，也用于限制list listpack。 */
 void quicklistNodeLimit(int fill, size_t *size, unsigned int *count) {
+    /* 默认设置为最大值 */
     *size = SIZE_MAX;
     *count = UINT_MAX;
 
     if (fill >= 0) {
-        /* Ensure that one node have at least one entry */
+        /* 确保一个节点至少有一个entry */
         *count = (fill == 0) ? 1 : fill;
     } else {
         size_t offset = (-fill) - 1;
