@@ -33,12 +33,10 @@
  * List API
  *----------------------------------------------------------------------------*/
 
-/* Check the length and size of a number of objects that will be added to list to see
- * if we need to convert a listpack to a quicklist. Note that we only check string
- * encoded objects as their string length can be queried in constant time.
+/* 检查将添加到列表中的对象的数量，以查看是否需要将listpack转换为quicklist。
+ * 请注意，我们只检查字符串编码的对象，因为它们的字符串长度可以在常数时间内查询。
  *
- * If callback is given the function is called in order for caller to do some work
- * before the list conversion. */
+ * 如果提供了回调函数，则调用该函数以允许调用者在列表转换之前执行一些工作。 */
 static void listTypeTryConvertListpack(robj *o, robj **argv, int start, int end,
                                        beforeConvertCB fn, void *data)
 {
@@ -158,11 +156,10 @@ void listTypeTryConversionAppend(robj *o, robj **argv, int start, int end,
     listTypeTryConversionRaw(o, LIST_CONV_GROWING, argv, start, end, fn, data);
 }
 
-/* The function pushes an element to the specified list object 'subject',
- * at head or tail position as specified by 'where'.
+/* 该函数将元素推送到指定的列表对象'subject'，
+ * 根据'where'指定头部或尾部位置。
  *
- * There is no need for the caller to increment the refcount of 'value' as
- * the function takes care of it if needed. */
+ * 调用者不需要增加'value'的引用计数，因为如果需要，函数会处理它。 */
 void listTypePush(robj *subject, robj *value, int where) {
     if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
         int pos = (where == LIST_HEAD) ? QUICKLIST_HEAD : QUICKLIST_TAIL;

@@ -42,7 +42,7 @@
 #define INTSET_ENC_INT32 (sizeof(int32_t))
 #define INTSET_ENC_INT64 (sizeof(int64_t))
 
-/* Return the required encoding for the provided value. */
+/* 返回提供值所需的编码。 */
 static uint8_t _intsetValueEncoding(int64_t v) {
     if (v < INT32_MIN || v > INT32_MAX)
         return INTSET_ENC_INT64;
@@ -78,7 +78,7 @@ static int64_t _intsetGet(intset *is, int pos) {
     return _intsetGetEncoded(is,pos,intrev32ifbe(is->encoding));
 }
 
-/* Set the value at pos, using the configured encoding. */
+/* 设置pos处的值，使用配置的编码。 */
 static void _intsetSet(intset *is, int pos, int64_t value) {
     uint32_t encoding = intrev32ifbe(is->encoding);
 
@@ -110,21 +110,18 @@ static intset *intsetResize(intset *is, uint32_t len) {
     return is;
 }
 
-/* Search for the position of "value". Return 1 when the value was found and
- * sets "pos" to the position of the value within the intset. Return 0 when
- * the value is not present in the intset and sets "pos" to the position
- * where "value" can be inserted. */
+/* 搜索"value"的位置。当找到值时返回1，并设置"pos"为值在intset中的位置。
+ * 当值不在intset中时返回0，并设置"pos"为"value"可以插入的位置。 */
 static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
     int64_t cur = -1;
 
-    /* The value can never be found when the set is empty */
+    /* 当集合为空时，无法找到值 */
     if (intrev32ifbe(is->length) == 0) {
         if (pos) *pos = 0;
         return 0;
     } else {
-        /* Check for the case where we know we cannot find the value,
-         * but do know the insert position. */
+        /* 检查我们无法找到值的情况，但知道插入位置。 */
         if (value > _intsetGet(is,max)) {
             if (pos) *pos = intrev32ifbe(is->length);
             return 0;
@@ -134,6 +131,7 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
         }
     }
 
+    /* 二分查找 */
     while(max >= min) {
         mid = ((unsigned int)min + (unsigned int)max) >> 1;
         cur = _intsetGet(is,mid);
@@ -155,24 +153,23 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     }
 }
 
-/* Upgrades the intset to a larger encoding and inserts the given integer. */
+/* 将intset升级为更大的编码并插入给定整数。 */
 static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
     uint8_t curenc = intrev32ifbe(is->encoding);
     uint8_t newenc = _intsetValueEncoding(value);
     int length = intrev32ifbe(is->length);
     int prepend = value < 0 ? 1 : 0;
 
-    /* First set new encoding and resize */
+    /* 首先设置新编码并调整大小 */
     is->encoding = intrev32ifbe(newenc);
     is = intsetResize(is,intrev32ifbe(is->length)+1);
 
-    /* Upgrade back-to-front so we don't overwrite values.
-     * Note that the "prepend" variable is used to make sure we have an empty
-     * space at either the beginning or the end of the intset. */
+    /* 从后向前升级，以避免覆盖值。
+     * 注意，"prepend"变量用于确保我们在intset的开头或结尾有一个空的空间。 */
     while(length--)
         _intsetSet(is,length+prepend,_intsetGetEncoded(is,length,curenc));
 
-    /* Set the value at the beginning or the end. */
+    /* 在开头或结尾设置值。 */
     if (prepend)
         _intsetSet(is,0,value);
     else
@@ -202,28 +199,26 @@ static void intsetMoveTail(intset *is, uint32_t from, uint32_t to) {
     memmove(dst,src,bytes);
 }
 
-/* Insert an integer in the intset */
+/* 在intset中插入一个整数 */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
     if (success) *success = 1;
 
-    /* Upgrade encoding if necessary. If we need to upgrade, we know that
-     * this value should be either appended (if > 0) or prepended (if < 0),
-     * because it lies outside the range of existing values. */
+    /* 如果需要升级编码，我们知道这个值应该要么附加（如果> 0）要么前置（如果< 0），
+     * 因为它位于现有值的范围之外。 */
     if (valenc > intrev32ifbe(is->encoding)) {
-        /* This always succeeds, so we don't need to curry *success. */
+        /* 这总是成功的，所以我们不需要传递*success。 */
         return intsetUpgradeAndAdd(is,value);
     } else {
-        /* Abort if the value is already present in the set.
-         * This call will populate "pos" with the right position to insert
-         * the value when it cannot be found. */
+        /* 如果值已存在于集合中，则中止。
+         * 此调用将填充"pos"，以插入值的正确位置。 */
         if (intsetSearch(is,value,&pos)) {
             if (success) *success = 0;
             return is;
         }
 
-        is = intsetResize(is,intrev32ifbe(is->length)+1);
+        is = intsetResize(is,intrev32ifbe(is->length)+1); // 调整intset的大小
         if (pos < intrev32ifbe(is->length)) intsetMoveTail(is,pos,pos+1);
     }
 

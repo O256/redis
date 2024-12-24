@@ -571,25 +571,25 @@ static void __quicklistInsertPlainNode(quicklist *quicklist, quicklistNode *old_
 int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
     quicklistNode *orig_head = quicklist->head;
 
-    if (unlikely(isLargeElement(sz))) {
+    if (unlikely(isLargeElement(sz))) { // 如果元素大小大于阈值，则创建一个普通节点
         __quicklistInsertPlainNode(quicklist, quicklist->head, value, sz, 0);
         return 1;
     }
 
-    if (likely(
-            _quicklistNodeAllowInsert(quicklist->head, quicklist->fill, sz))) {
-        quicklist->head->entry = lpPrepend(quicklist->head->entry, value, sz);
-        quicklistNodeUpdateSz(quicklist->head);
+    if (likely( 
+            _quicklistNodeAllowInsert(quicklist->head, quicklist->fill, sz))) { // 如果允许插入
+        quicklist->head->entry = lpPrepend(quicklist->head->entry, value, sz); // 在头部插入元素
+        quicklistNodeUpdateSz(quicklist->head); // 更新节点大小
     } else {
-        quicklistNode *node = quicklistCreateNode();
-        node->entry = lpPrepend(lpNew(0), value, sz);
+        quicklistNode *node = quicklistCreateNode(); // 创建一个新节点
+        node->entry = lpPrepend(lpNew(0), value, sz); // 在头部插入元素
 
-        quicklistNodeUpdateSz(node);
-        _quicklistInsertNodeBefore(quicklist, quicklist->head, node);
+        quicklistNodeUpdateSz(node); // 更新节点大小    
+        _quicklistInsertNodeBefore(quicklist, quicklist->head, node); // 在头部插入新节点
     }
-    quicklist->count++;
-    quicklist->head->count++;
-    return (orig_head != quicklist->head);
+    quicklist->count++; // 增加计数
+    quicklist->head->count++; // 增加头部节点计数
+    return (orig_head != quicklist->head); // 返回是否创建了新头部节点
 }
 
 /* Add new entry to tail node of quicklist.

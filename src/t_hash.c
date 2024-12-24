@@ -34,19 +34,18 @@
  * Hash type API
  *----------------------------------------------------------------------------*/
 
-/* Check the length of a number of objects to see if we need to convert a
- * listpack to a real hash. Note that we only check string encoded objects
- * as their string length can be queried in constant time. */
+/* 检查一组对象的长度，以确定是否需要将listpack转换为真正的hash。
+ * 注意，我们只检查字符串编码的对象，因为它们的字符串长度可以在常数时间内查询。 */
 void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
     int i;
     size_t sum = 0;
 
     if (o->encoding != OBJ_ENCODING_LISTPACK) return;
 
-    /* We guess that most of the values in the input are unique, so
-     * if there are enough arguments we create a pre-sized hash, which
-     * might over allocate memory if there are duplicates. */
-    size_t new_fields = (end - start + 1) / 2;
+    /* 我们假设输入的大多数值是唯一的，所以
+     * 如果参数足够多，我们创建一个预先分配大小的hash，这可能会过度分配内存，
+     * 如果存在重复项。 */
+    size_t new_fields = (end - start + 1) / 2; // 计算新字段的数量
     if (new_fields > server.hash_max_listpack_entries) {
         hashTypeConvert(o, OBJ_ENCODING_HT);
         dictExpand(o->ptr, new_fields);
@@ -67,8 +66,8 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
         hashTypeConvert(o, OBJ_ENCODING_HT);
 }
 
-/* Get the value from a listpack encoded hash, identified by field.
- * Returns -1 when the field cannot be found. */
+/* 从listpack编码的hash中获取值，通过field标识。
+ * 如果找不到字段，则返回-1。 */
 int hashTypeGetFromListpack(robj *o, sds field,
                             unsigned char **vstr,
                             unsigned int *vlen,
@@ -83,8 +82,8 @@ int hashTypeGetFromListpack(robj *o, sds field,
     if (fptr != NULL) {
         fptr = lpFind(zl, fptr, (unsigned char*)field, sdslen(field), 1);
         if (fptr != NULL) {
-            /* Grab pointer to the value (fptr points to the field) */
-            vptr = lpNext(zl, fptr);
+            /* 获取指向值的指针（fptr指向字段） */
+            vptr = lpNext(zl, fptr); /* 获取下一个条目 */
             serverAssert(vptr != NULL);
         }
     }
@@ -246,7 +245,7 @@ int hashTypeSet(robj *o, sds field, sds value, int flags) {
         } else {
             v = sdsdup(value);
         }
-        de = dictAddRaw(ht, field, &existing);
+        de = dictAddRaw(ht, field, &existing); // 添加元素
         if (de) {
             dictSetVal(ht, de, v);
             if (flags & HASH_SET_TAKE_FIELD) {
@@ -451,7 +450,7 @@ robj *hashTypeLookupWriteOrCreate(client *c, robj *key) {
     return o;
 }
 
-
+/* 将listpack转换为真正的hash。注意，我们只检查字符串编码的对象，因为它们的字符串长度可以在常数时间内查询。 */
 void hashTypeConvertListpack(robj *o, int enc) {
     serverAssert(o->encoding == OBJ_ENCODING_LISTPACK);
 
@@ -459,18 +458,18 @@ void hashTypeConvertListpack(robj *o, int enc) {
         /* Nothing to do... */
 
     } else if (enc == OBJ_ENCODING_HT) {
-        hashTypeIterator *hi;
-        dict *dict;
-        int ret;
+        hashTypeIterator *hi; // 初始化迭代器
+        dict *dict; // 创建一个字典
+        int ret; // 返回值
 
-        hi = hashTypeInitIterator(o);
-        dict = dictCreate(&hashDictType);
+        hi = hashTypeInitIterator(o); // 初始化迭代器
+        dict = dictCreate(&hashDictType); // 创建一个字典
 
         /* Presize the dict to avoid rehashing */
-        dictExpand(dict,hashTypeLength(o));
+        dictExpand(dict,hashTypeLength(o)); // 预先分配字典的大小
 
         while (hashTypeNext(hi) != C_ERR) {
-            sds key, value;
+            sds key, value; // 创建两个sds字符串
 
             key = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_KEY);
             value = hashTypeCurrentObjectNewSds(hi,OBJ_HASH_VALUE);
@@ -496,7 +495,7 @@ void hashTypeConvert(robj *o, int enc) {
     if (o->encoding == OBJ_ENCODING_LISTPACK) {
         hashTypeConvertListpack(o, enc);
     } else if (o->encoding == OBJ_ENCODING_HT) {
-        serverPanic("Not implemented");
+        serverPanic("Not implemented"); 
     } else {
         serverPanic("Unknown hash encoding");
     }

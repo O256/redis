@@ -193,7 +193,7 @@ rax *raxNew(void) {
     rax->numele = 0;
     rax->numnodes = 1;
     rax->head = raxNewNode(0,0);
-    if (rax->head == NULL) {
+    if (rax->head == NULL) { // 如果创建头节点失败
         rax_free(rax);
         return NULL;
     } else {
@@ -1456,20 +1456,18 @@ int raxIteratorPrevStep(raxIterator *it, int noup) {
     }
 }
 
-/* Seek an iterator at the specified element.
- * Return 0 if the seek failed for syntax error or out of memory. Otherwise
- * 1 is returned. When 0 is returned for out of memory, errno is set to
- * the ENOMEM value. */
+/* 在指定的元素上设置迭代器。
+ * 如果搜索失败，则返回0。否则，返回1。当返回0时，表示内存不足，errno设置为ENOMEM。 */
 int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
     int eq = 0, lt = 0, gt = 0, first = 0, last = 0;
 
-    it->stack.items = 0; /* Just resetting. Initialized by raxStart(). */
+    it->stack.items = 0; /* 只是重置。由raxStart()初始化。 */
     it->flags |= RAX_ITER_JUST_SEEKED;
     it->flags &= ~RAX_ITER_EOF;
     it->key_len = 0;
     it->node = NULL;
 
-    /* Set flags according to the operator used to perform the seek. */
+    /* 根据使用的操作符设置标志。 */
     if (op[0] == '>') {
         gt = 1;
         if (op[1] == '=') eq = 1;
@@ -1484,11 +1482,10 @@ int raxSeek(raxIterator *it, const char *op, unsigned char *ele, size_t len) {
         last = 1;
     } else {
         errno = 0;
-        return 0; /* Error. */
+        return 0; /* 错误。 */
     }
 
-    /* If there are no elements, set the EOF condition immediately and
-     * return. */
+    /* 如果没有元素，立即设置EOF条件并返回。 */
     if (it->rt->numele == 0) {
         it->flags |= RAX_ITER_EOF;
         return 1;

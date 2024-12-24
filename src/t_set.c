@@ -127,7 +127,7 @@ int setTypeAddAux(robj *set, char *str, size_t len, int64_t llval, int str_is_sd
     if (!str) {
         if (set->encoding == OBJ_ENCODING_INTSET) {
             uint8_t success = 0;
-            set->ptr = intsetAdd(set->ptr, llval, &success);
+            set->ptr = intsetAdd(set->ptr, llval, &success); /* 将整数添加到intset中 */
             if (success) maybeConvertIntset(set);
             return success;
         }
@@ -139,24 +139,24 @@ int setTypeAddAux(robj *set, char *str, size_t len, int64_t llval, int str_is_sd
 
     serverAssert(str);
     if (set->encoding == OBJ_ENCODING_HT) {
-        /* Avoid duping the string if it is an sds string. */
+        /* 避免复制字符串，如果它是sds字符串。 */
         sds sdsval = str_is_sds ? (sds)str : sdsnewlen(str, len);
         dict *ht = set->ptr;
         void *position = dictFindPositionForInsert(ht, sdsval, NULL);
         if (position) {
-            /* Key doesn't already exist in the set. Add it but dup the key. */
+            /* 键不存在于集合中。添加它，但复制键。 */
             if (sdsval == str) sdsval = sdsdup(sdsval);
             dictInsertAtPosition(ht, sdsval, position);
         } else if (sdsval != str) {
-            /* String is already a member. Free our temporary sds copy. */
+            /* 字符串已经是成员。释放我们的临时sds副本。 */
             sdsfree(sdsval);
         }
         return (position != NULL);
     } else if (set->encoding == OBJ_ENCODING_LISTPACK) {
         unsigned char *lp = set->ptr;
-        unsigned char *p = lpFirst(lp);
+        unsigned char *p = lpFirst(lp); // 获取listpack的第一个元素
         if (p != NULL)
-            p = lpFind(lp, p, (unsigned char*)str, len, 0);
+            p = lpFind(lp, p, (unsigned char*)str, len, 0); // 在listpack中查找元素
         if (p == NULL) {
             /* Not found.  */
             if (lpLength(lp) < server.set_max_listpack_entries &&

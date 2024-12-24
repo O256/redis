@@ -430,75 +430,66 @@ int dictAdd(dict *d, void *key, void *val)
     return DICT_OK;
 }
 
-/* Low level add or find:
- * This function adds the entry but instead of setting a value returns the
- * dictEntry structure to the user, that will make sure to fill the value
- * field as they wish.
+/* 低级添加或查找：
+ * 此函数添加条目，但不设置值，而是返回dictEntry结构体给用户，用户将确保填充值字段。
  *
- * This function is also directly exposed to the user API to be called
- * mainly in order to store non-pointers inside the hash value, example:
+ * 此函数还直接暴露给用户API，主要用于存储非指针的哈希值，例如：
  *
  * entry = dictAddRaw(dict,mykey,NULL);
  * if (entry != NULL) dictSetSignedIntegerVal(entry,1000);
  *
- * Return values:
+ * 返回值：
  *
- * If key already exists NULL is returned, and "*existing" is populated
- * with the existing entry if existing is not NULL.
+ * 如果键已存在，则返回NULL，并且如果existing不为NULL，则*existing填充现有条目。
  *
- * If key was added, the hash entry is returned to be manipulated by the caller.
+ * 如果添加了键，则返回哈希条目，供调用者操作。
  */
 dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
 {
-    /* Get the position for the new key or NULL if the key already exists. */
+    /* 获取新键的位置或NULL，如果键已存在。 */
     void *position = dictFindPositionForInsert(d, key, existing);
     if (!position) return NULL;
 
-    /* Dup the key if necessary. */
+    /* 如果需要，复制键。 */
     if (d->type->keyDup) key = d->type->keyDup(d, key);
 
     return dictInsertAtPosition(d, key, position);
 }
 
-/* Adds a key in the dict's hashtable at the position returned by a preceding
- * call to dictFindPositionForInsert. This is a low level function which allows
- * splitting dictAddRaw in two parts. Normally, dictAddRaw or dictAdd should be
- * used instead. */
+/* 在dict的哈希表中添加键，位置由dictFindPositionForInsert返回。
+ * 这是一个低级函数，允许将dictAddRaw拆分为两部分。通常，使用dictAddRaw或dictAdd。 */
 dictEntry *dictInsertAtPosition(dict *d, void *key, void *position) {
-    dictEntry **bucket = position; /* It's a bucket, but the API hides that. */
+    dictEntry **bucket = position; /* 它是一个桶，但API隐藏了这一点。 */
     dictEntry *entry;
-    /* If rehashing is ongoing, we insert in table 1, otherwise in table 0.
-     * Assert that the provided bucket is the right table. */
+    /* 如果正在进行重新散列，我们插入表1，否则插入表0。
+     * 断言提供的桶是正确的表。 */
     int htidx = dictIsRehashing(d) ? 1 : 0;
     assert(bucket >= &d->ht_table[htidx][0] &&
-           bucket <= &d->ht_table[htidx][DICTHT_SIZE_MASK(d->ht_size_exp[htidx])]);
+           bucket <= &d->ht_table[htidx][DICTHT_SIZE_MASK(d->ht_size_exp[htidx])]); // 断言提供的桶是正确的表
     size_t metasize = dictEntryMetadataSize(d);
-    if (d->type->no_value) {
-        assert(!metasize); /* Entry metadata + no value not supported. */
+    if (d->type->no_value) { // 如果字典没有值
+        assert(!metasize); /* 条目元数据+没有值不支持。 */
         if (d->type->keys_are_odd && !*bucket) {
-            /* We can store the key directly in the destination bucket without the
-             * allocated entry.
+            /* 我们可以直接将键存储在目标桶中，而无需分配的条目。
              *
-             * TODO: Add a flag 'keys_are_even' and if set, we can use this
-             * optimization for these dicts too. We can set the LSB bit when
-             * stored as a dict entry and clear it again when we need the key
-             * back. */
+             * TODO: 添加一个标志'keys_are_even'，如果设置，我们可以使用这个
+             * 优化来这些字典。我们可以在存储为dict条目时设置LSB位，
+             * 并在需要键时再次清除它。 */
             entry = key;
             assert(entryIsKey(entry));
         } else {
-            /* Allocate an entry without value. */
+            /* 分配一个没有值的条目。 */
             entry = createEntryNoValue(key, *bucket);
         }
     } else {
-        /* Allocate the memory and store the new entry.
-         * Insert the element in top, with the assumption that in a database
-         * system it is more likely that recently added entries are accessed
-         * more frequently. */
+        /* 分配内存并存储新条目。
+         * 在数据库系统中，最近添加的条目更有可能频繁访问。 */
         entry = zmalloc(sizeof(*entry) + metasize);
-        assert(entryIsNormal(entry)); /* Check alignment of allocation */
+        assert(entryIsNormal(entry)); /* 检查分配的内存对齐 */
         if (metasize > 0) {
             memset(dictEntryMetadata(entry), 0, metasize);
         }
+        // 插入到链表头部
         entry->key = key;
         entry->next = *bucket;
     }
@@ -807,7 +798,7 @@ void *dictGetVal(const dictEntry *de) {
 
 int64_t dictGetSignedIntegerVal(const dictEntry *de) {
     assert(entryHasValue(de));
-    return de->v.s64;
+    return de->v.s64; // 返回整数类型的值
 }
 
 uint64_t dictGetUnsignedIntegerVal(const dictEntry *de) {
@@ -1435,23 +1426,21 @@ static signed char _dictNextExp(unsigned long size)
     return 8*sizeof(long) - __builtin_clzl(size-1);
 }
 
-/* Finds and returns the position within the dict where the provided key should
- * be inserted using dictInsertAtPosition if the key does not already exist in
- * the dict. If the key exists in the dict, NULL is returned and the optional
- * 'existing' entry pointer is populated, if provided. */
+/* 查找并返回dict中提供键的位置，如果键不存在，则使用dictInsertAtPosition插入。
+ * 如果键已存在，则返回NULL，并填充可选的'existing'条目指针，如果提供。 */
 void *dictFindPositionForInsert(dict *d, const void *key, dictEntry **existing) {
     unsigned long idx, table;
     dictEntry *he;
     uint64_t hash = dictHashKey(d, key);
     if (existing) *existing = NULL;
-    if (dictIsRehashing(d)) _dictRehashStep(d);
+    if (dictIsRehashing(d)) _dictRehashStep(d); // 如果正在重新散列，则执行一步重新散列
 
-    /* Expand the hash table if needed */
+    /* 如果需要，扩展哈希表 */
     if (_dictExpandIfNeeded(d) == DICT_ERR)
         return NULL;
     for (table = 0; table <= 1; table++) {
         idx = hash & DICTHT_SIZE_MASK(d->ht_size_exp[table]);
-        /* Search if this slot does not already contain the given key */
+        /* 搜索此槽是否不包含给定键 */
         he = d->ht_table[table][idx];
         while(he) {
             void *he_key = dictGetKey(he);
@@ -1459,13 +1448,12 @@ void *dictFindPositionForInsert(dict *d, const void *key, dictEntry **existing) 
                 if (existing) *existing = he;
                 return NULL;
             }
-            he = dictGetNext(he);
+            he = dictGetNext(he); // 获取下一个元素
         }
         if (!dictIsRehashing(d)) break;
     }
 
-    /* If we are in the process of rehashing the hash table, the bucket is
-     * always returned in the context of the second (new) hash table. */
+    /* 如果我们在重新散列哈希表，桶总是返回在第二个（新）哈希表的上下文中。 */
     dictEntry **bucket = &d->ht_table[dictIsRehashing(d) ? 1 : 0][idx];
     return bucket;
 }

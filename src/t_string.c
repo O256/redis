@@ -129,7 +129,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
         addReply(c, ok_reply ? ok_reply : shared.ok);
     }
 
-    /* Propagate without the GET argument (Isn't needed if we had expire since in that case we completely re-written the command argv) */
+    /* 传播命令时不包含GET参数(如果有expire参数则不需要,因为在那种情况下我们已经完全重写了命令参数) */
     if ((flags & OBJ_SET_GET) && !expire) {
         int argc = 0;
         int j;

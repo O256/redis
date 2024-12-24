@@ -2125,23 +2125,21 @@ void unprotectClient(client *c) {
     }
 }
 
-/* Like processMultibulkBuffer(), but for the inline protocol instead of RESP,
- * this function consumes the client query buffer and creates a command ready
- * to be executed inside the client structure. Returns C_OK if the command
- * is ready to be executed, or C_ERR if there is still protocol to read to
- * have a well formed command. The function also returns C_ERR when there is
- * a protocol error: in such a case the client structure is setup to reply
- * with the error and close the connection. */
+/* 类似于processMultibulkBuffer()函数,但处理的是内联协议而不是RESP协议。
+ * 此函数会消耗客户端的查询缓冲区,并在客户端结构体中创建一个准备执行的命令。
+ * 如果命令已准备好执行,则返回C_OK;如果还需要读取更多协议内容才能形成完整命令,
+ * 则返回C_ERR。当出现协议错误时也会返回C_ERR:在这种情况下,客户端结构体会被
+ * 设置为返回错误并关闭连接。 */
 int processInlineBuffer(client *c) {
     char *newline;
     int argc, j, linefeed_chars = 1;
     sds *argv, aux;
     size_t querylen;
 
-    /* Search for end of line */
+    /* 搜索行尾 */
     newline = strchr(c->querybuf+c->qb_pos,'\n');
 
-    /* Nothing to do without a \r\n */
+    /* 如果没有\r\n,则返回C_ERR */
     if (newline == NULL) {
         if (sdslen(c->querybuf)-c->qb_pos > PROTO_INLINE_MAX_SIZE) {
             addReplyError(c,"Protocol error: too big inline request");
@@ -2150,11 +2148,11 @@ int processInlineBuffer(client *c) {
         return C_ERR;
     }
 
-    /* Handle the \r\n case. */
+    /* 处理\r\n情况 */
     if (newline != c->querybuf+c->qb_pos && *(newline-1) == '\r')
         newline--, linefeed_chars++;
 
-    /* Split the input buffer up to the \r\n */
+    /* 将输入缓冲区分割到\r\n */
     querylen = newline-(c->querybuf+c->qb_pos);
     aux = sdsnewlen(c->querybuf+c->qb_pos,querylen);
     argv = sdssplitargs(aux,&argc);
@@ -2165,19 +2163,15 @@ int processInlineBuffer(client *c) {
         return C_ERR;
     }
 
-    /* Newline from slaves can be used to refresh the last ACK time.
-     * This is useful for a slave to ping back while loading a big
-     * RDB file. */
+    /* 从从节点发送的换行符可以用于刷新最后一次ACK时间。
+     * 这对于从节点在加载大RDB文件时非常有用。 */
     if (querylen == 0 && getClientType(c) == CLIENT_TYPE_SLAVE)
         c->repl_ack_time = server.unixtime;
 
-    /* Masters should never send us inline protocol to run actual
-     * commands. If this happens, it is likely due to a bug in Redis where
-     * we got some desynchronization in the protocol, for example
-     * because of a PSYNC gone bad.
+    /* 主节点不应该发送内联协议来运行实际命令。
+     * 如果发生这种情况,可能是由于Redis中的一个错误,导致协议不同步,例如PSYNC失败。
      *
-     * However there is an exception: masters may send us just a newline
-     * to keep the connection active. */
+     * 然而有一个例外:主节点可能会发送一个换行符来保持连接活跃。 */
     if (querylen != 0 && c->flags & CLIENT_MASTER) {
         sdsfreesplitres(argv,argc);
         serverLog(LL_WARNING,"WARNING: Receiving inline protocol from master, master stream corruption? Closing the master connection and discarding the cached master.");
@@ -2185,10 +2179,10 @@ int processInlineBuffer(client *c) {
         return C_ERR;
     }
 
-    /* Move querybuffer position to the next query in the buffer. */
+    /* 将查询缓冲区位置移动到缓冲区中的下一个查询。 */
     c->qb_pos += querylen+linefeed_chars;
 
-    /* Setup argv array on client structure */
+    /* 在客户端结构体中设置argv数组 */
     if (argc) {
         if (c->argv) zfree(c->argv);
         c->argv_len = argc;
@@ -2196,7 +2190,7 @@ int processInlineBuffer(client *c) {
         c->argv_len_sum = 0;
     }
 
-    /* Create redis objects for all arguments. */
+    /* 为所有参数创建redis对象 */
     for (c->argc = 0, j = 0; j < argc; j++) {
         c->argv[c->argc] = createObject(OBJ_STRING,argv[j]);
         c->argc++;
@@ -2239,17 +2233,13 @@ static void setProtocolError(const char *errstr, client *c) {
     c->flags |= (CLIENT_CLOSE_AFTER_REPLY|CLIENT_PROTOCOL_ERROR);
 }
 
-/* Process the query buffer for client 'c', setting up the client argument
- * vector for command execution. Returns C_OK if after running the function
- * the client has a well-formed ready to be processed command, otherwise
- * C_ERR if there is still to read more buffer to get the full command.
- * The function also returns C_ERR when there is a protocol error: in such a
- * case the client structure is setup to reply with the error and close
- * the connection.
+/* 处理客户端'c'的查询缓冲区，设置客户端参数向量以执行命令。
+ * 如果运行函数后客户端有一个格式良好的准备执行的命令，则返回C_OK；
+ * 如果还需要读取更多缓冲区以获取完整命令，则返回C_ERR。
+ * 该函数还返回C_ERR，当存在协议错误时：在这种情况下，客户端结构体被设置为回复错误并关闭连接。
  *
- * This function is called if processInputBuffer() detects that the next
- * command is in RESP format, so the first byte in the command is found
- * to be '*'. Otherwise for inline commands processInlineBuffer() is called. */
+ * 该函数在processInputBuffer()检测到下一个命令是RESP格式时被调用，因此命令的第一个字节是'*'。
+ * 否则，对于内联命令，调用processInlineBuffer()。 */
 int processMultibulkBuffer(client *c) {
     char *newline = NULL;
     int ok;
@@ -2512,40 +2502,32 @@ int processPendingCommandAndInputBuffer(client *c) {
     return C_OK;
 }
 
-/* This function is called every time, in the client structure 'c', there is
- * more query buffer to process, because we read more data from the socket
- * or because a client was blocked and later reactivated, so there could be
- * pending query buffer, already representing a full command, to process.
- * return C_ERR in case the client was freed during the processing */
+/* 每当客户端结构体'c'中有更多的查询缓冲区需要处理时,就会调用此函数。
+ * 这种情况发生在:从socket读取到更多数据时,或者之前被阻塞的客户端重新激活时。
+ * 此时查询缓冲区中可能已经包含了一个完整的待处理命令。
+ * 如果客户端在处理过程中被释放,则返回C_ERR */
 int processInputBuffer(client *c) {
-    /* Keep processing while there is something in the input buffer */
+    /* 只要查询缓冲区中还有数据,就继续处理 */
     while(c->qb_pos < sdslen(c->querybuf)) {
-        /* Immediately abort if the client is in the middle of something. */
+        /* 如果客户端正在处理某个命令,则立即停止处理 */
         if (c->flags & CLIENT_BLOCKED) break;
 
-        /* Don't process more buffers from clients that have already pending
-         * commands to execute in c->argv. */
+        /* 如果客户端有待执行的命令,则立即停止处理 */
         if (c->flags & CLIENT_PENDING_COMMAND) break;
 
-        /* Don't process input from the master while there is a busy script
-         * condition on the slave. We want just to accumulate the replication
-         * stream (instead of replying -BUSY like we do with other clients) and
-         * later resume the processing. */
+        /* 如果客户端是主节点,并且正在处理一个繁忙的脚本,则立即停止处理 */
+        if (isInsideYieldingLongCommand() && c->flags & CLIENT_MASTER) break;
         if (isInsideYieldingLongCommand() && c->flags & CLIENT_MASTER) break;
 
-        /* CLIENT_CLOSE_AFTER_REPLY closes the connection once the reply is
-         * written to the client. Make sure to not let the reply grow after
-         * this flag has been set (i.e. don't process more commands).
-         *
-         * The same applies for clients we want to terminate ASAP. */
+        /* 如果客户端设置了CLIENT_CLOSE_AFTER_REPLY或CLIENT_CLOSE_ASAP标志,则立即停止处理 */
         if (c->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
 
-        /* Determine request type when unknown. */
+        /* 如果客户端请求类型未知,则确定请求类型 */
         if (!c->reqtype) {
-            if (c->querybuf[c->qb_pos] == '*') {
-                c->reqtype = PROTO_REQ_MULTIBULK;
+            if (c->querybuf[c->qb_pos] == '*') { // 如果查询缓冲区中的第一个字符是'*'
+                c->reqtype = PROTO_REQ_MULTIBULK; // 则请求类型为多批量请求
             } else {
-                c->reqtype = PROTO_REQ_INLINE;
+                c->reqtype = PROTO_REQ_INLINE; // 否则请求类型为内联请求
             }
         }
 
@@ -2557,56 +2539,48 @@ int processInputBuffer(client *c) {
             serverPanic("Unknown request type");
         }
 
-        /* Multibulk processing could see a <= 0 length. */
+        /* 如果客户端的参数数量为0,则重置客户端 */
         if (c->argc == 0) {
             resetClient(c);
         } else {
-            /* If we are in the context of an I/O thread, we can't really
-             * execute the command here. All we can do is to flag the client
-             * as one that needs to process the command. */
+            /* 如果当前是I/O线程,则将客户端标记为需要处理命令 */
             if (io_threads_op != IO_THREADS_OP_IDLE) {
                 serverAssert(io_threads_op == IO_THREADS_OP_READ);
                 c->flags |= CLIENT_PENDING_COMMAND;
                 break;
             }
 
-            /* We are finally ready to execute the command. */
+            /* 如果客户端不再有效,则立即停止处理 */
             if (processCommandAndResetClient(c) == C_ERR) {
-                /* If the client is no longer valid, we avoid exiting this
-                 * loop and trimming the client buffer later. So we return
-                 * ASAP in that case. */
                 return C_ERR;
             }
         }
     }
 
     if (c->flags & CLIENT_MASTER) {
-        /* If the client is a master, trim the querybuf to repl_applied,
-         * since master client is very special, its querybuf not only
-         * used to parse command, but also proxy to sub-replicas.
+        /* 如果客户端是主节点,则修剪查询缓冲区到repl_applied,
+         * 因为主节点客户端非常特殊,它的查询缓冲区不仅用于解析命令,还用于代理到子副本。
          *
-         * Here are some scenarios we cannot trim to qb_pos:
-         * 1. we don't receive complete command from master
-         * 2. master client blocked cause of client pause
-         * 3. io threads operate read, master client flagged with CLIENT_PENDING_COMMAND
+         * 以下是一些无法修剪到qb_pos的情况:
+         * 1. 从主节点接收到的命令不完整
+         * 2. 主节点客户端因客户端暂停而被阻塞
+         * 3.  I/O线程正在读取,主节点客户端被标记为CLIENT_PENDING_COMMAND
          *
-         * In these scenarios, qb_pos points to the part of the current command
-         * or the beginning of next command, and the current command is not applied yet,
-         * so the repl_applied is not equal to qb_pos. */
+         * 在这些情况下,qb_pos指向当前命令的一部分或下一个命令的开始,
+         * 并且当前命令尚未应用,因此repl_applied不等于qb_pos。
+         * 所以,repl_applied不等于qb_pos。 */
         if (c->repl_applied) {
             sdsrange(c->querybuf,c->repl_applied,-1);
             c->qb_pos -= c->repl_applied;
             c->repl_applied = 0;
         }
     } else if (c->qb_pos) {
-        /* Trim to pos */
+        /* 如果客户端不是主节点,则修剪查询缓冲区到qb_pos */
         sdsrange(c->querybuf,c->qb_pos,-1);
         c->qb_pos = 0;
     }
 
-    /* Update client memory usage after processing the query buffer, this is
-     * important in case the query buffer is big and wasn't drained during
-     * the above loop (because of partially sent big commands). */
+    /* 更新客户端内存使用情况,因为在处理查询缓冲区后,如果查询缓冲区很大且未在上述循环中被清空(因为部分发送的大命令),则更新客户端内存使用情况 */
     if (io_threads_op == IO_THREADS_OP_IDLE)
         updateClientMemUsageAndBucket(c);
 

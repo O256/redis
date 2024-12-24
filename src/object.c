@@ -40,6 +40,7 @@
 
 /* ===================== Creation and parsing of objects ==================== */
 
+// 参数默认创建的是OBJ_STRING类型，编码为OBJ_ENCODING_RAW
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -706,11 +707,11 @@ robj *tryObjectEncoding(robj *o) {
 robj *getDecodedObject(robj *o) {
     robj *dec;
 
-    if (sdsEncodedObject(o)) {
+    if (sdsEncodedObject(o)) { // 如果对象是sds编码的，则增加引用计数并返回对象
         incrRefCount(o);
         return o;
     }
-    if (o->type == OBJ_STRING && o->encoding == OBJ_ENCODING_INT) {
+    if (o->type == OBJ_STRING && o->encoding == OBJ_ENCODING_INT) { // 如果对象是字符串且是整数编码的，则创建一个新的字符串对象
         char buf[32];
 
         ll2string(buf,32,(long)o->ptr);

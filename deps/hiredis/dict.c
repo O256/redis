@@ -256,9 +256,9 @@ static dictEntry *dictFind(dict *ht, const void *key) {
     dictEntry *he;
     unsigned int h;
 
-    if (ht->size == 0) return NULL;
-    h = dictHashKey(ht, key) & ht->sizemask;
-    he = ht->table[h];
+    if (ht->size == 0) return NULL; // 如果哈希表为空,返回NULL
+    h = dictHashKey(ht, key) & ht->sizemask; // 计算哈希值并取模
+    he = ht->table[h]; // 获取哈希表中的元素
     while(he) {
         if (dictCompareHashKeys(ht, key, he->key))
             return he;

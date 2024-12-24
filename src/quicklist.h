@@ -136,14 +136,14 @@ typedef struct quicklistEntry {
 #define QUICKLIST_TAIL -1
 
 /* quicklist node encodings */
-#define QUICKLIST_NODE_ENCODING_RAW 1
-#define QUICKLIST_NODE_ENCODING_LZF 2
+#define QUICKLIST_NODE_ENCODING_RAW 1 // 原始编码
+#define QUICKLIST_NODE_ENCODING_LZF 2 // LZF编码
 
 /* quicklist compression disable */
 #define QUICKLIST_NOCOMPRESS 0
 
 /* quicklist node container formats */
-#define QUICKLIST_NODE_CONTAINER_PLAIN 1
+#define QUICKLIST_NODE_CONTAINER_PLAIN 1 // 普通节点
 #define QUICKLIST_NODE_CONTAINER_PACKED 2
 
 #define QL_NODE_IS_PLAIN(node) ((node)->container == QUICKLIST_NODE_CONTAINER_PLAIN)

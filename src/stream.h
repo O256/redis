@@ -51,51 +51,31 @@ typedef struct streamIterator {
 
 /* Consumer group. */
 typedef struct streamCG {
-    streamID last_id;       /* Last delivered (not acknowledged) ID for this
-                               group. Consumers that will just ask for more
-                               messages will served with IDs > than this. */
-    long long entries_read; /* In a perfect world (CG starts at 0-0, no dels, no
-                               XGROUP SETID, ...), this is the total number of
-                               group reads. In the real world, the reasoning behind
-                               this value is detailed at the top comment of
-                               streamEstimateDistanceFromFirstEverEntry(). */
-    rax *pel;               /* Pending entries list. This is a radix tree that
-                               has every message delivered to consumers (without
-                               the NOACK option) that was yet not acknowledged
-                               as processed. The key of the radix tree is the
-                               ID as a 64 bit big endian number, while the
-                               associated value is a streamNACK structure.*/
-    rax *consumers;         /* A radix tree representing the consumers by name
-                               and their associated representation in the form
-                               of streamConsumer structures. */
+    streamID last_id;       /* 此组最后交付（未确认）的ID。消费者只需请求更多消息，就会使用大于此ID的消息。 */
+    long long entries_read; /* 在理想世界中（CG从0-0开始，没有删除，没有XGROUP SETID，...），这是组读取的总次数。
+                              在现实世界中，这个值的推理细节在
+                               streamEstimateDistanceFromFirstEverEntry()的顶部注释中。 */
+    rax *pel;               /* 待处理条目列表。这是一个radix树，包含所有已交付但未确认的消息（不包括NOACK选项）。
+                               radix树的键是64位大端数表示的ID，而关联值是streamNACK结构。*/
+    rax *consumers;         /* 一个radix树，表示消费者名称及其关联的streamConsumer结构。 */
 } streamCG;
 
-/* A specific consumer in a consumer group.  */
+/* 一个特定消费者在消费者组中。 */
 typedef struct streamConsumer {
-    mstime_t seen_time;         /* Last time this consumer tried to perform an action (attempted reading/claiming). */
-    mstime_t active_time;       /* Last time this consumer was active (successful reading/claiming). */
-    sds name;                   /* Consumer name. This is how the consumer
-                                   will be identified in the consumer group
-                                   protocol. Case sensitive. */
-    rax *pel;                   /* Consumer specific pending entries list: all
-                                   the pending messages delivered to this
-                                   consumer not yet acknowledged. Keys are
-                                   big endian message IDs, while values are
-                                   the same streamNACK structure referenced
-                                   in the "pel" of the consumer group structure
-                                   itself, so the value is shared. */
+    mstime_t seen_time;         /* 上次尝试执行操作（读取/声明）的时间。 */
+    mstime_t active_time;       /* 上次此消费者活跃（成功读取/声明）的时间。 */
+    sds name;                   /* 消费者名称。这是消费者在消费者组协议中将如何识别。区分大小写。 */
+    rax *pel;                   /* 消费者特定待处理条目列表：所有待处理消息，未确认。键是64位大端数表示的ID，值是streamNACK结构。 */
 } streamConsumer;
 
-/* Pending (yet not acknowledged) message in a consumer group. */
+/* 消费者组中待处理（尚未确认）的消息。 */
 typedef struct streamNACK {
-    mstime_t delivery_time;     /* Last time this message was delivered. */
-    uint64_t delivery_count;    /* Number of times this message was delivered.*/
-    streamConsumer *consumer;   /* The consumer this message was delivered to
-                                   in the last delivery. */
+    mstime_t delivery_time;     /* 上次此消息被交付的时间。 */
+    uint64_t delivery_count;    /* 此消息被交付的次数。*/
+    streamConsumer *consumer;   /* 此消息被交付到的消费者。 */
 } streamNACK;
 
-/* Stream propagation information, passed to functions in order to propagate
- * XCLAIM commands to AOF and slaves. */
+/* Stream传播信息，传递给函数以传播XCLAIM命令到AOF和从属服务器。 */
 typedef struct streamPropInfo {
     robj *keyname;
     robj *groupname;
@@ -104,10 +84,10 @@ typedef struct streamPropInfo {
 /* Prototypes of exported APIs. */
 struct client;
 
-/* Flags for streamCreateConsumer */
+/* 用于 streamCreateConsumer 的标志 */
 #define SCC_DEFAULT       0
-#define SCC_NO_NOTIFY     (1<<0) /* Do not notify key space if consumer created */
-#define SCC_NO_DIRTIFY    (1<<1) /* Do not dirty++ if consumer created */
+#define SCC_NO_NOTIFY     (1<<0) /* 如果创建消费者,则不通知键空间 */
+#define SCC_NO_DIRTIFY    (1<<1) /* 如果创建消费者,则不增加脏位 */
 
 #define SCG_INVALID_ENTRIES_READ -1
 
