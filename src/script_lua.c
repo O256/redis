@@ -1522,12 +1522,10 @@ static void luaCreateArray(lua_State *lua, robj **elev, int elec) {
  * Redis provided math.random
  * ------------------------------------------------------------------------- */
 
-/* We replace math.random() with our implementation that is not affected
- * by specific libc random() implementations and will output the same sequence
- * (for the same seed) in every arch. */
+/* 我们用一个不受特定libc random()实现影响的实现替换math.random()，
+ * 该实现将在每个架构上输出相同的序列（对于相同的种子）。 */
 
-/* The following implementation is the one shipped with Lua itself but with
- * rand() replaced by redisLrand48(). */
+/* 以下实现是Lua自带的实现,但用redisLrand48()替换了rand()。 */
 static int redis_math_random (lua_State *L) {
   /* the `%' avoids the (rare) case of r==1, and is needed also because on
      some systems (SunOS!) `rand()' may return a value larger than RAND_MAX */

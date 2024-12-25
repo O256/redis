@@ -170,16 +170,15 @@ int luaRedisReplicateCommandsCommand(lua_State *lua) {
     return 1;
 }
 
-/* Initialize the scripting environment.
+/* 初始化脚本环境。
  *
- * This function is called the first time at server startup with
- * the 'setup' argument set to 1.
+ * 该函数在服务器启动时第一次调用,setup参数设置为1。
  *
- * It can be called again multiple times during the lifetime of the Redis
- * process, with 'setup' set to 0, and following a scriptingRelease() call,
- * in order to reset the Lua scripting environment.
+ * 它可以在Redis进程的整个生命周期内多次调用,setup参数设置为0,
+ * 并在调用 scriptingRelease() 后,
+ * 以重置Lua脚本环境。
  *
- * However it is simpler to just call scriptingReset() that does just that. */
+ * 然而,调用 scriptingReset() 会更简单,因为它只是执行此操作。 */
 void scriptingInit(int setup) {
     lua_State *lua = lua_open();
 
@@ -274,7 +273,7 @@ void scriptingRelease(int async) {
     lctx.lua_scripts_mem = 0;
     lua_close(lctx.lua);
 }
-
+// 重置脚本环境。
 void scriptingReset(int async) {
     scriptingRelease(async);
     scriptingInit(0);

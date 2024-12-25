@@ -1846,10 +1846,11 @@ void disklessLoadDiscardTempDb(redisDb *tempDb) {
     discardTempDb(tempDb, replicationEmptyDbCallback);
 }
 
-/* If we know we got an entirely different data set from our master
- * we have no way to incrementally feed our replicas after that.
- * We want our replicas to resync with us as well, if we have any sub-replicas.
- * This is useful on readSyncBulkPayload in places where we just finished transferring db. */
+/* 如果我们知道我们从主节点获得了完全不同的数据集,
+ * 我们无法增量地向我们的副本提供数据。
+ * 我们希望我们的副本也与我们同步,如果它们有任何子副本。
+ * 这在 readSyncBulkPayload 中很有用,
+ * 在这些地方我们刚刚完成数据库传输。 */
 void replicationAttachToNewMaster(void) { 
     /* Replica starts to apply data from new master, we must discard the cached
      * master structure. */
@@ -1860,7 +1861,7 @@ void replicationAttachToNewMaster(void) {
     freeReplicationBacklog(); /* Don't allow our chained replicas to PSYNC. */
 }
 
-/* Asynchronously read the SYNC payload we receive from a master */
+/* 异步读取我们从主节点接收到的SYNC payload */
 #define REPL_MAX_WRITTEN_BEFORE_FSYNC (1024*1024*8) /* 8 MB */
 void readSyncBulkPayload(connection *conn) {
     char buf[PROTO_IOBUF_LEN];
@@ -1909,16 +1910,14 @@ void readSyncBulkPayload(connection *conn) {
             goto error;
         }
 
-        /* There are two possible forms for the bulk payload. One is the
-         * usual $<count> bulk format. The other is used for diskless transfers
-         * when the master does not know beforehand the size of the file to
-         * transfer. In the latter case, the following format is used:
+        /* 有两种可能的格式用于bulk payload。一种是通常的$<count> bulk格式。
+         * 另一种用于diskless传输,当主节点事先不知道要传输的文件大小时使用。
+         * 在这种情况下,使用以下格式:
          *
          * $EOF:<40 bytes delimiter>
          *
-         * At the end of the file the announced delimiter is transmitted. The
-         * delimiter is long and random enough that the probability of a
-         * collision with the actual file content can be ignored. */
+         * 在文件末尾,宣布的delimiter被传输。delimiter足够长且随机,
+         * 因此与实际文件内容发生碰撞的概率可以忽略不计。 */
         if (strncmp(buf+1,"EOF:",4) == 0 && strlen(buf+5) >= CONFIG_RUN_ID_SIZE) {
             usemark = 1;
             memcpy(eofmark,buf+5,CONFIG_RUN_ID_SIZE);
@@ -1941,8 +1940,7 @@ void readSyncBulkPayload(connection *conn) {
     }
 
     if (!use_diskless_load) {
-        /* Read the data from the socket, store it to a file and search
-         * for the EOF. */
+        /* 从socket中读取数据,存储到文件中,并搜索EOF。 */
         if (usemark) {
             readlen = sizeof(buf);
         } else {
@@ -3374,8 +3372,7 @@ void replicationCacheMasterUsingMyself(void) {
     server.master = NULL;
 }
 
-/* Free a cached master, called when there are no longer the conditions for
- * a partial resync on reconnection. */
+/* 释放一个缓存的master,当不再满足部分重同步的条件时调用。 */
 void replicationDiscardCachedMaster(void) {
     if (server.cached_master == NULL) return;
 
@@ -3385,12 +3382,9 @@ void replicationDiscardCachedMaster(void) {
     server.cached_master = NULL;
 }
 
-/* Turn the cached master into the current master, using the file descriptor
- * passed as argument as the socket for the new master.
+/* 将缓存的master转换为当前master,使用作为参数传递的文件描述符作为新master的socket。
  *
- * This function is called when successfully setup a partial resynchronization
- * so the stream of data that we'll receive will start from where this
- * master left. */
+ * 该函数在成功设置部分重同步后调用,因此我们将接收的数据流将从该master离开的地方开始。 */
 void replicationResurrectCachedMaster(connection *conn) {
     server.master = server.cached_master;
     server.cached_master = NULL;

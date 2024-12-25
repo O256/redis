@@ -8573,8 +8573,7 @@ static void slaveMode(int send_sync) {
  * RDB transfer mode
  *--------------------------------------------------------------------------- */
 
-/* This function implements --rdb, so it uses the replication protocol in order
- * to fetch the RDB file from a remote server. */
+/* 该函数实现了--rdb,因此它使用复制协议从远程服务器获取RDB文件。 */
 static void getRDB(clusterManagerNode *node) {
     int fd;
     redisContext *s;

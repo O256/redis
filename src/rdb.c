@@ -1818,22 +1818,20 @@ int lpValidateIntegrityAndDups(unsigned char *lp, size_t size, int deep, int pai
     return ret;
 }
 
-/* Load a Redis object of the specified type from the specified file.
- * On success a newly allocated object is returned, otherwise NULL.
- * When the function returns NULL and if 'error' is not NULL, the
- * integer pointed by 'error' is set to the type of error that occurred */
+/* 从指定文件加载指定类型的Redis对象。
+ * 成功时返回一个新分配的对象，否则返回NULL。
+ * 当函数返回NULL且'error'不为NULL时，整数指针'error'被设置为发生的错误类型 */
 robj *rdbLoadObject(int rdbtype, rio *rdb, sds key, int dbid, int *error) {
     robj *o = NULL, *ele, *dec;
     uint64_t len;
     unsigned int i;
 
-    /* Set default error of load object, it will be set to 0 on success. */
+    /* 设置加载对象的默认错误，成功时设置为0。 */
     if (error) *error = RDB_LOAD_ERR_OTHER;
 
     int deep_integrity_validation = server.sanitize_dump_payload == SANITIZE_DUMP_YES;
-    if (server.sanitize_dump_payload == SANITIZE_DUMP_CLIENTS) {
-        /* Skip sanitization when loading (an RDB), or getting a RESTORE command
-         * from either the master or a client using an ACL user with the skip-sanitize-payload flag. */
+    if (server.sanitize_dump_payload == SANITIZE_DUMP_CLIENTS) { /* 如果启用了客户端级别的RDB数据包清理 */
+        /* 在加载（RDB）或从主节点或使用具有skip-sanitize-payload标志的ACL用户的客户端获取RESTORE命令时跳过清理。 */
         int skip = server.loading ||
             (server.current_client && (server.current_client->flags & CLIENT_MASTER));
         if (!skip && server.current_client && server.current_client->user)

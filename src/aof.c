@@ -1388,12 +1388,11 @@ struct client *createAOFClient(void) {
     return c;
 }
 
-/* Replay an append log file. On success AOF_OK or AOF_TRUNCATED is returned,
- * otherwise, one of the following is returned:
- * AOF_OPEN_ERR: Failed to open the AOF file.
- * AOF_NOT_EXIST: AOF file doesn't exist.
- * AOF_EMPTY: The AOF file is empty (nothing to load).
- * AOF_FAILED: Failed to load the AOF file. */
+/* 加载单个AOF文件。成功时返回AOF_OK或AOF_TRUNCATED，否则返回以下之一：
+ * AOF_OPEN_ERR: 无法打开AOF文件。
+ * AOF_NOT_EXIST: AOF文件不存在。
+ * AOF_EMPTY: AOF文件为空（无需加载）。
+ * AOF_FAILED: 无法加载AOF文件。 */
 int loadSingleAppendOnlyFile(char *filename) {
     struct client *fakeClient;
     struct redis_stat sb;
@@ -1429,10 +1428,10 @@ int loadSingleAppendOnlyFile(char *filename) {
      * to the same file we're about to read. */
     server.aof_state = AOF_OFF;
 
-    client *old_cur_client = server.current_client;
-    client *old_exec_client = server.executing_client;
-    fakeClient = createAOFClient();
-    server.current_client = server.executing_client = fakeClient;
+    client *old_cur_client = server.current_client; /* 旧的当前客户端 */
+    client *old_exec_client = server.executing_client; /* 旧的执行客户端 */
+    fakeClient = createAOFClient(); /* 创建一个AOF客户端 */
+    server.current_client = server.executing_client = fakeClient; /* 将当前客户端和执行客户端设置为AOF客户端 */
 
     /* Check if the AOF file is in RDB format (it may be RDB encoded base AOF
      * or old style RDB-preamble AOF). In that case we need to load the RDB file 
